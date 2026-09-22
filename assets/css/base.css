@@ -1,0 +1,192 @@
+/* ==========================================================================
+   base.css — estilos compartilhados por todas as páginas do milenium archive.
+   Cada página/app só redefine as variáveis de tema (:root) e o que é exclusivo dela.
+   ========================================================================== */
+
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  /* tema (o app sobrescreve) */
+  --accent:#a06ee0;
+  --accent-rgb:160,110,224;
+  --accent-light:#c79bff;
+  --title-a:#221a33;
+  --title-b:#1a1428;
+  /* neutros */
+  --panel:rgba(18,14,26,.72);
+  --panel-solid:#151021;
+  --glass:rgba(10,8,16,.6);
+  --stroke:rgba(255,255,255,.14);
+  /* origem de compra, padrão em todo o site: estrutura em ciano, Jita em rosa claro */
+  --rota-e:#3fc1d4;
+  --rota-j:#f2a2c8;
+  --line:rgba(255,255,255,.08);
+  --line-soft:rgba(255,255,255,.06);
+  --text:#efeaf7;
+  --text-soft:#cdc4dd;
+  --muted:#a99fbd;
+  --danger:#c0392b;
+  --danger-line:#e05a4a;
+  /* cores de marca de cada app (usadas também fora do app, ex.: ícone no main) */
+  --cor-calculeve:#d2801e;
+  /* layout */
+  --bar-h:0px;
+  --win-w:520px;
+}
+html,body{height:100%}
+body{
+  font:14px/1.5 "Inter","Segoe UI",Ubuntu,Cantarell,system-ui,sans-serif;
+  color:var(--text);background:#0a0810;overflow:hidden;-webkit-font-smoothing:antialiased;
+}
+
+/* ---------- papel de parede ---------- */
+#wall{
+  position:fixed;inset:0;background-size:cover;background-position:center;
+  opacity:0;transition:opacity .9s ease;transform:scale(1.03);
+}
+#wall.on{opacity:1}
+#vignette{
+  position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse at 50% 40%,transparent 35%,rgba(0,0,0,.45) 100%),
+    linear-gradient(to bottom,rgba(0,0,0,.25) 0,transparent 22%,transparent 70%,rgba(0,0,0,.5) 100%);
+}
+#badge{
+  position:fixed;left:14px;bottom:calc(var(--bar-h) + 12px);z-index:20;max-width:340px;
+  padding:7px 12px;border-radius:8px;font-size:11px;color:var(--muted);
+  opacity:0;transition:opacity .5s ease .3s;
+}
+#badge.on{opacity:1}
+#badge b{color:#d8cfe8;font-weight:600}
+#badge a{color:inherit}
+
+/* ---------- estados compartilhados ---------- */
+/* hover na cor do app: ícones, botões e itens de menu (.app) */
+.icon:hover,.btn:hover,.app:hover{background:rgba(var(--accent-rgb),.22);border-color:rgba(var(--accent-rgb),.5)}
+/* hover vermelho de ação destrutiva/de saída */
+.alerta:hover,.win .close:hover{background:var(--danger);border-color:var(--danger-line);color:#fff}
+/* painel de vidro flutuante sobre o papel de parede */
+.vidro{background:var(--glass);backdrop-filter:blur(10px);border:1px solid var(--line)}
+
+/* ---------- ícones da área de trabalho ---------- */
+#icons{position:absolute;top:18px;left:18px;display:flex;flex-direction:column;gap:6px;z-index:5}
+/* ícones lado a lado dentro da coluna */
+.icon-linha{display:flex;gap:6px}
+.icon{
+  display:block;width:92px;padding:10px 6px 8px;border-radius:10px;text-align:center;cursor:pointer;
+  border:1px solid transparent;user-select:none;transition:background .15s,border-color .15s;
+  color:inherit;text-decoration:none;background:none;font:inherit;
+}
+.icon svg,.icon img{width:38px;height:38px;display:block;margin:0 auto 6px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.6))}
+.icon svg{color:var(--accent);stroke-width:1.6}
+
+.cor-calculeve,.icon svg.cor-calculeve{color:var(--cor-calculeve)}
+.icon img{border-radius:6px}
+/* ícone de arquivo PNG recolorido na cor do app: o PNG vira máscara (só o alfa conta) */
+.mascara{background:var(--accent);-webkit-mask:var(--mascara) center/contain no-repeat;mask:var(--mascara) center/contain no-repeat}
+.icon .mascara{display:block;width:38px;height:38px;margin:0 auto 6px}
+.mascara-industry{--mascara:url(../icons/Industry.png)}
+.mascara-freighter{--mascara:url(../icons/Isis_freighter.png)}
+.icon:focus-visible,.btn:focus-visible,.tb:focus-visible,.tab:focus-visible,.win .close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.icon span{font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,.9);line-height:1.25;display:block}
+.grid{display:flex;flex-wrap:wrap;gap:6px}
+
+/* ---------- botões ---------- */
+.btn{
+  padding:5px 10px;border-radius:6px;border:1px solid var(--stroke);background:transparent;
+  color:var(--text);font:inherit;font-size:12px;cursor:pointer;transition:.15s;text-decoration:none;text-align:center;
+}
+.btn.perigo{border-color:rgba(224,90,74,.6)}
+.acts{display:flex;gap:8px;margin-top:12px}
+.acts .btn{flex:1}
+
+/* ---------- bandeja: botão de papel de parede + relógio ---------- */
+#tray{display:flex;align-items:center;gap:4px}
+.tb{
+  height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:8px;
+  background:transparent;border:1px solid transparent;color:var(--text);cursor:pointer;
+  font:inherit;font-size:13px;transition:background .15s,border-color .15s;
+}
+.tb svg{width:16px;height:16px;stroke-width:1.8}
+.tb:hover{background:rgba(255,255,255,.09)}
+.tb.active{background:rgba(var(--accent-rgb),.3);border-color:rgba(var(--accent-rgb),.55)}
+#clock{text-align:right;padding:0 12px 0 8px;line-height:1.15;cursor:default;font-variant-numeric:tabular-nums}
+#clock .t{font-size:14px;font-weight:600;letter-spacing:.4px}
+#clock .d{font-size:10.5px;color:var(--muted)}
+
+/* ---------- menu de contexto ---------- */
+#ctx{
+  position:fixed;z-index:60;min-width:190px;padding:5px;border-radius:10px;display:none;
+  background:var(--panel);backdrop-filter:blur(20px);border:1px solid var(--stroke);
+  box-shadow:0 18px 44px rgba(0,0,0,.6);
+}
+#ctx button{
+  display:block;width:100%;text-align:left;padding:8px 12px;border:0;border-radius:6px;
+  background:transparent;color:var(--text);font:inherit;font-size:12.5px;cursor:pointer;
+}
+#ctx button:hover{background:rgba(var(--accent-rgb),.28)}
+
+/* ---------- janelas ---------- */
+.win{
+  position:fixed;z-index:50;top:14%;left:50%;transform:translateX(-50%);
+  /* abre no menor tamanho em que o conteúdo cabe sem quebrar, até --win-w;
+     .largura-fixa abre direto em --win-w (janela de tabela, que cresceria até a tela) */
+  width:max-content;max-width:min(var(--win-w),calc(100vw - 32px));
+  background:var(--panel-solid);border:1px solid var(--stroke);border-radius:12px;
+  box-shadow:0 30px 70px rgba(0,0,0,.65);overflow:hidden;display:none;
+  resize:both;min-width:260px;min-height:120px;max-height:calc(100vh - 8px);
+  --content-h:60vh;   /* altura máxima do conteúdo antes de redimensionar; a página pode trocar por janela */
+}
+.win.open{display:flex;flex-direction:column;animation:pop .18s ease}
+.win.largura-fixa{width:min(var(--win-w),calc(100vw - 32px))}
+/* redimensionada pelo canto: a largura do usuário só é limitada pela tela */
+.win[style*="width"]{max-width:calc(100vw - 32px)}
+/* redimensionada pelo canto: o navegador grava a altura no style; o conteúdo passa a ocupar a janela.
+   A variável é declarada no próprio .content, então vale mesmo que a página tenha trocado --content-h na janela. */
+.win[style*="height"] .content{--content-h:none}
+@keyframes pop{from{opacity:0}}
+.win .title{
+  display:flex;align-items:center;gap:10px;padding:9px 10px 9px 14px;user-select:none;
+  background:linear-gradient(to bottom,var(--title-a),var(--title-b));border-bottom:1px solid var(--line);
+  cursor:grab;touch-action:none;
+}
+.win .title:active{cursor:grabbing}
+.win .title h3{font-size:12.5px;font-weight:600;flex:1;letter-spacing:.3px}
+.win .close{
+  height:24px;min-width:24px;padding:0 6px;border-radius:6px;border:0;background:transparent;color:var(--muted);
+  cursor:pointer;font-size:15px;line-height:1;transition:.15s;
+}
+.win .close.xx{font-size:13px;letter-spacing:-3px;padding-right:9px}
+.win .content{padding:16px 18px 18px;max-height:var(--content-h);overflow-y:auto;font-size:12.5px;flex:1 1 auto;min-height:0}
+.win .content h4{font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:var(--accent);margin:16px 0 7px}
+.win .content h4:first-child{margin-top:0}
+.win .content p{color:var(--text-soft);margin-bottom:7px}
+.win .content a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(var(--accent-rgb),.35);word-break:break-all}
+.win .content a:hover{color:var(--accent-light);border-color:var(--accent-light)}
+.win .content .btn{border-bottom:1px solid var(--stroke);color:var(--text);word-break:normal}
+.win .content .btn:hover{color:var(--text)}
+.nota{color:var(--muted);font-size:11.5px;margin-top:10px}
+.vazio{color:var(--muted)}
+
+/* véu das janelas modais: tudo abaixo da janela do topo fica inacessível */
+#veil{position:fixed;inset:0;background:rgba(0,0,0,.3);display:none}
+
+/* ---------- créditos ---------- */
+.cred{padding:9px 0;border-bottom:1px solid var(--line-soft)}
+.cred:last-child{border-bottom:0}
+.cred b{display:block;font-size:12.5px;font-weight:600;margin-bottom:2px}
+.cred small{color:var(--muted);font-size:11.5px;display:block;line-height:1.55}
+.legal{
+  margin-top:14px;padding:11px 12px;border-radius:8px;
+  background:rgba(var(--accent-rgb),.09);border:1px solid rgba(var(--accent-rgb),.2);
+  font-size:11px;color:var(--muted);line-height:1.6;
+}
+
+@media (max-width:600px){
+  #badge{max-width:calc(100vw - 28px);font-size:10px}
+  #clock .d{display:none}
+}
+
+/* Origem de compra. Vale para número e para rótulo, em qualquer aba: comprar na estrutura é ciano,
+   comprar em Jita é rosa claro. */
+.rota-e{color:var(--rota-e)}
+.rota-j{color:var(--rota-j)}

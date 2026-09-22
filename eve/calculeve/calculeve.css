@@ -1,0 +1,144 @@
+/* calculeve.css — tema e componentes exclusivos da Calculeve. Base em /assets/css/base.css. */
+:root{
+  --accent:var(--cor-calculeve);
+  --accent-rgb:210,128,30;
+  --accent-light:#e8a050;
+  --title-a:#2a1f14;
+  --title-b:#1e160f;
+  --win-w:420px;
+}
+
+/* bandeja flutuante no canto inferior direito (não há barra de tarefas) */
+#tray{
+  position:fixed;right:12px;bottom:12px;z-index:20;padding:4px;border-radius:10px;
+}
+#tray .tb{padding:0 10px}
+#tray .tb.fic{padding:0 6px}
+#tray .tb.fic img{width:22px;height:22px;border-radius:4px;display:block}
+
+/* ---------- personagens ---------- */
+.char{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-soft)}
+.char img{width:32px;height:32px;border-radius:6px;flex:none}
+.char b{flex:1;font-weight:600}
+
+/* ---------- estoque ---------- */
+/* janela do Estoque cresce com os ícones (todos os chars + Tudão numa linha); só quebra se faltar tela */
+#w-estoque{--win-w:100vw}
+#w-assets{--win-w:1000px;--content-h:78vh;top:6%}
+#w-assets .content{padding:0;display:flex;flex-direction:column}
+.tabs{display:flex;gap:18px;padding:10px 16px 0;border-bottom:1px solid var(--line)}
+.tab{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);font:inherit;font-size:13px;padding:0 0 8px;cursor:pointer}
+.tab.on{color:var(--text);border-color:var(--accent)}
+#as-body{overflow:auto;flex:1;min-height:120px}
+#as-quando{font-size:11px;color:var(--muted)}
+.status{padding:14px 16px;color:var(--muted);font-size:12px}
+
+table.as{width:100%;border-collapse:collapse;font-size:12.5px;min-width:640px}
+table.as th{position:sticky;top:0;background:#1a1426;text-align:left;font-weight:500;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.as td{padding:4px 8px;border-bottom:1px solid rgba(255,255,255,.04);white-space:nowrap}
+table.as .n{text-align:right;font-variant-numeric:tabular-nums}
+tr.loc td{background:rgba(255,255,255,.035);cursor:pointer;font-weight:500;padding:6px 8px}
+tr.loc:hover td{background:rgba(var(--accent-rgb),.14)}
+tr.it.pai td:first-child{cursor:pointer}
+.tw{display:inline-block;width:14px;color:var(--muted)}
+.ico{width:24px;height:24px;vertical-align:middle;margin-right:8px;border-radius:3px}
+.ico.falhou{visibility:hidden}
+.sub{color:var(--muted);margin-left:6px}
+
+/* segurança do sistema */
+.sec{font-weight:600;margin-right:6px;color:var(--muted)}
+.sec.hi{color:#4fb3d9}
+.sec.lo{color:#e0a030}
+.sec.null{color:#d0406a}
+
+/* ---------- fuel blocks ---------- */
+#w-fuel{--win-w:100vw}
+#fuel-iso{justify-content:center}
+.fuel-escolhas{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.seletor{position:relative;display:flex;align-items:center}
+.seletor>.btn{display:inline-flex;align-items:center;gap:8px}
+.seletor>.limpa{margin-left:2px;padding:5px 8px}
+.seletor>.limpa[hidden]{display:none}
+.seletor>.btn img{width:22px;height:22px;border-radius:4px;margin:0}
+.seletor>.vidro{position:absolute;left:0;top:calc(100% + 4px);z-index:5;min-width:220px;border-radius:8px;padding:4px;display:flex;flex-direction:column}
+.seletor>.vidro[hidden]{display:none}
+.seletor>.vidro button{display:flex;align-items:center;gap:8px;padding:5px 8px;border:0;border-radius:6px;background:none;color:var(--text);font:inherit;cursor:pointer;text-align:left;white-space:nowrap}
+.seletor>.vidro button:hover{background:rgba(var(--accent-rgb),.22)}
+.seletor>.vidro img{width:24px;height:24px;border-radius:4px;margin:0}
+.seletor .mascara{display:inline-block;width:20px;height:20px;flex:none}
+.icon.bp{width:auto;min-width:92px}
+.icon.bp img{width:48px;height:48px;border-radius:4px}
+.icon .bp-nome,.icon .bp-dados{color:var(--accent);white-space:nowrap}
+.icon .bp-dados{font-size:11px;margin-top:2px}
+.divisao{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
+.icon.bp{cursor:pointer}
+#w-fmat{--win-w:100vw}
+.fmat-topo{display:flex;align-items:center;gap:12px;justify-content:space-between}
+#fmat-bp{color:var(--accent)}
+#fmat-runs{width:90px;padding:4px 6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:var(--text);font:inherit;text-align:right}
+#fmat-aviso:empty{display:none}
+.fmat-runs{display:flex;align-items:center;gap:8px}
+#fmat-tempo{text-align:right;margin-top:6px;color:var(--accent)}
+.fmat-precos{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px}
+#fmat-precos-ts{font-size:11px;color:var(--muted)}
+#w-nerd table.as{min-width:0}
+#w-nerd table.nerd + table.nerd{margin-top:18px}
+#explica-texto{white-space:pre-line}
+.btn.explica{padding:1px 6px;font-size:11.5px}
+#explica-ver:empty{display:none}
+#explica-ver .btn{flex:none}
+#w-explica{--win-w:520px}
+table.as td.preco{line-height:1.35}
+table.as td.preco .lado{color:var(--muted);margin-right:6px}
+table.as tr.total td{font-weight:600;border-top:1px solid var(--line)}
+#w-fmat table.as{min-width:0}
+.pos{color:#5cb85c}
+.neg{color:var(--danger-line)}
+
+/* ---------- estruturas ---------- */
+#w-estr{--win-w:720px}
+.estr-busca{display:flex;gap:8px}
+#estr-q{flex:1;padding:5px 8px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:var(--text);font:inherit}
+#estr-body{margin-top:10px}
+#estr-body tr.clica{cursor:pointer}
+#estr-body tr.clica:hover td{background:rgba(var(--accent-rgb),.14)}
+.cad{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+.cad b{flex:1;font-weight:600}
+.cad .sub{margin-left:0}
+#w-estr-bonus{--win-w:380px}
+.campos{display:flex;flex-direction:column;gap:8px}
+.campos label{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.campos input[type=text]{width:180px;text-align:left}
+.campos input{width:90px;padding:4px 6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:var(--text);font:inherit;text-align:right}
+
+@media (max-width:600px){
+  #badge{bottom:62px}
+}
+
+/* ---------- invenção T2 ---------- */
+#w-t2{--win-w:100vw}
+#w-t2job{--win-w:1280px;--content-h:78vh;top:6%}
+#w-t2job table.as{min-width:0}
+#t2j-bp{color:var(--accent)}
+#t2j-aviso:empty{display:none}
+#t2j-jobs,#t2j-sobra{width:90px;padding:4px 6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:var(--text);font:inherit;text-align:right}
+#t2j-body h4{margin:16px 0 6px}
+/* recuo da árvore: o nível vem do JS (--nivel), calculado na hora */
+table.as td.arv{padding-left:calc(8px + var(--nivel) * 14px)}
+table.as td.arv .tw{margin-right:4px}
+table.as tr.podado td{color:var(--muted)}
+table.as tr.vence td{background:rgba(92,184,92,.14)}
+table.as tr.clica{cursor:pointer}
+table.as tr.clica:hover td{background:rgba(var(--accent-rgb),.14)}
+.constroi{color:#5cb85c}
+.falta{color:var(--danger-line)}
+
+/* parâmetros e saldo em grade: rótulo em cima, valor embaixo */
+table.as.grade{width:auto;min-width:0}
+table.as.grade th,table.as.grade td{text-align:center;white-space:nowrap;padding:3px 14px}
+table.as.grade tr.rot th{position:static;background:none;border-bottom:0;padding-bottom:0;font-size:11.5px}
+table.as.grade tr.rot + tr td{border-bottom:1px solid var(--line);font-size:14px;padding-top:0}
+table.as .c{text-align:center}
+table.as td.cinza,table.as td.n.cinza{color:var(--muted)}
+/* a grade é estreita: fica centralizada na janela em vez de encostada à esquerda */
+table.as.grade{margin:0 auto}

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calculeve</title>
+<!-- Content-Security-Policy: o navegador só aceita recursos das origens abaixo.
+     MANTER ATUALIZADA: todo domínio novo que o site passar a usar (script, imagem, API) entra aqui,
+     senão o recurso é bloqueado sem aviso na página (aparece só no console). Script/estilo inline é proibido. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://images.evetech.net; connect-src 'self' https://esi.evetech.net https://login.eveonline.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<link rel="stylesheet" href="../../assets/css/base.css">
+<link rel="stylesheet" href="calculeve.css">
+</head>
+<body>
+<div id="wall"></div>
+
+<div id="icons">
+  <button type="button" class="icon" id="ic-chars" title="Personagens">
+    <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#pasta-pessoa"/></svg>
+    <span>Personagens</span>
+  </button>
+  <button type="button" class="icon" id="ic-estoque" title="Estoque">
+    <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#caixa"/></svg>
+    <span>Estoque</span>
+  </button>
+  <div class="icon-linha">
+    <button type="button" class="icon" id="ic-fuel" title="Fuel Blocks">
+      <img src="../../assets/icons/Fuel_Blocks.png" alt="">
+      <span>Fuel Blocks</span>
+    </button>
+    <button type="button" class="icon" id="ic-t2" title="Invenção T2">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#microscopio"/></svg>
+      <span>Invenção T2</span>
+    </button>
+  </div>
+  <div class="icon-linha">
+    <button type="button" class="icon" id="ic-estr" title="Cadastrar Estruturas">
+      <span class="mascara mascara-industry"></span>
+      <span>Cadastrar Estruturas</span>
+    </button>
+    <button type="button" class="icon" id="ic-frete" title="Cadastrar Freighter Service">
+      <span class="mascara mascara-freighter"></span>
+      <span>Cadastrar Freighter Service</span>
+    </button>
+  </div>
+  <div class="icon-linha">
+    <button type="button" class="icon" id="ic-wipe" title="Apagar todos os dados salvos no navegador">
+      <svg viewBox="0 0 28 33"><use href="../../assets/icons/Soldier_of_fortune_career_svg.svg#icone"/></svg>
+      <span>Apagar dados</span>
+    </button>
+    <button type="button" class="icon" id="ic-export" title="Exportar todos os dados salvos no navegador">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#exportar"/></svg>
+      <span>Exportar dados</span>
+    </button>
+    <button type="button" class="icon" id="ic-import" title="Importar dados de um arquivo exportado">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#importar"/></svg>
+      <span>Importar dados</span>
+    </button>
+  </div>
+  <a class="icon" id="ic-voltar" href="../../index.html" title="Voltar à área de trabalho">
+    <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#casa"/></svg>
+    <span>Voltar à main</span>
+  </a>
+</div>
+
+<div class="win" id="w-chars">
+  <div class="title"><h3>Personagens</h3><button type="button" class="close" data-close="w-chars">&times;</button></div>
+  <div class="content">
+    <div id="char-list"></div>
+    <div class="acts">
+      <button type="button" class="btn" id="add-char">+ Adicionar personagem</button>
+      <a class="btn" href="https://login.eveonline.com/account/logoff" target="_blank" rel="noopener">Deslogar conta</a>
+    </div>
+    <div class="nota" id="char-msg"></div>
+  </div>
+</div>
+
+<div class="win" id="w-estoque">
+  <div class="title"><h3>Estoque</h3><button type="button" class="close" data-close="w-estoque">&times;</button></div>
+  <div class="content"><div class="grid" id="est-grid"></div>
+    <p class="nota">Clique em "Tudão" uma vez para atualizar o estoque de todos os personagens!</p></div>
+</div>
+
+<div class="win largura-fixa" id="w-assets">
+  <div class="title"><h3 id="as-title">Estoque</h3>
+    <span id="as-quando"></span>
+    <button type="button" class="btn" id="as-refresh">Atualizar</button>
+    <button type="button" class="close" data-close="w-assets">&times;</button></div>
+  <div class="content">
+    <div class="tabs">
+      <button type="button" class="tab on" data-tab="assets">Personal Assets</button>
+      <button type="button" class="tab" data-tab="bps">Blueprints</button>
+    </div>
+    <div id="as-body"></div>
+  </div>
+</div>
+
+<div class="win" id="w-fuel">
+  <div class="title"><h3>Fuel Blocks</h3><button type="button" class="close" data-close="w-fuel">&times;</button></div>
+  <div class="content">
+    <div class="fuel-escolhas">
+      <div class="seletor">
+        <button type="button" class="btn" id="fuel-char-btn"></button>
+        <div class="vidro" id="fuel-char-lista" hidden></div>
+      </div>
+      <div class="seletor">
+        <button type="button" class="btn" id="fuel-merc-btn"></button>
+        <div class="vidro" id="fuel-merc-lista" hidden></div>
+      </div>
+      <div class="seletor">
+        <button type="button" class="btn" id="fuel-fab-btn"></button>
+        <div class="vidro" id="fuel-fab-lista" hidden></div>
+      </div>
+      <div class="seletor">
+        <button type="button" class="btn" id="fuel-frete-btn"></button>
+        <div class="vidro" id="fuel-frete-lista" hidden></div>
+      </div>
+    </div>
+    <div class="grid" id="fuel-grid"></div>
+    <div class="grid divisao" id="fuel-iso"></div>
+    <p class="nota" id="fuel-nota"></p></div>
+</div>
+
+<div class="win" id="w-fmat">
+  <div class="title"><h3 id="fmat-title">Materiais</h3><button type="button" class="close" data-close="w-fmat">&times;</button></div>
+  <div class="content">
+    <div class="fmat-topo">
+      <span id="fmat-bp"></span>
+      <span class="fmat-runs"><label>Runs <input type="number" id="fmat-runs" min="1" step="1" value="1"></label>
+        <button type="button" class="btn" id="fmat-max">Max estoque</button>
+        <button type="button" class="btn" id="fmat-zerar">Zerar estoque</button></span>
+    </div>
+    <div id="fmat-tempo"></div>
+    <div class="fmat-precos"><span id="fmat-precos-ts"></span>
+      <button type="button" class="btn" id="fmat-precos-btn">Atualizar preços</button></div>
+    <div class="fmat-precos"><button type="button" class="btn" id="fmat-nerd-btn">Números para Nerds</button></div>
+    <div class="nota" id="fmat-aviso"></div>
+    <div id="fmat-body"></div>
+  </div>
+</div>
+
+<div class="win" id="w-t2">
+  <div class="title"><h3>Invenção T2</h3><button type="button" class="close" data-close="w-t2">&times;</button></div>
+  <div class="content">
+    <div class="fuel-escolhas">
+      <div class="seletor">
+        <button type="button" class="btn" id="t2-char-btn"></button>
+        <div class="vidro" id="t2-char-lista" hidden></div>
+      </div>
+      <div class="seletor">
+        <button type="button" class="btn" id="t2-merc-btn"></button>
+        <div class="vidro" id="t2-merc-lista" hidden></div>
+      </div>
+      <div class="seletor">
+        <button type="button" class="btn" id="t2-fab-btn"></button>
+        <div class="vidro" id="t2-fab-lista" hidden></div>
+      </div>
+      <div class="seletor">
+        <button type="button" class="btn" id="t2-frete-btn"></button>
+        <div class="vidro" id="t2-frete-lista" hidden></div>
+      </div>
+    </div>
+    <div class="grid" id="t2-grid"></div>
+    <p class="nota" id="t2-nota"></p></div>
+</div>
+
+<div class="win largura-fixa" id="w-t2job">
+  <div class="title"><h3 id="t2j-title">Invenção</h3><button type="button" class="close" data-close="w-t2job">&times;</button></div>
+  <div class="content">
+    <div class="fmat-topo">
+      <span id="t2j-bp"></span>
+      <span class="fmat-runs">
+        <label>Jobs <input type="number" id="t2j-jobs" min="1" step="1" value="1"></label>
+        <label>Runs sobrando <input type="number" id="t2j-sobra" min="0" step="1" value="0"></label>
+      </span>
+    </div>
+    <div class="fmat-precos"><span id="t2j-precos-ts"></span>
+      <button type="button" class="btn" id="t2j-precos-btn">Atualizar preços</button></div>
+    <div class="fmat-precos"><button type="button" class="btn" id="t2j-nerd-btn">Números para Nerds</button></div>
+    <div class="nota" id="t2j-aviso"></div>
+    <div id="t2j-body"></div>
+  </div>
+</div>
+
+<div class="win" id="w-nerd">
+  <div class="title"><h3 id="nerd-title">Números para Nerds</h3><button type="button" class="close" data-close="w-nerd">&times;</button></div>
+  <div class="content"><div id="nerd-body"></div></div>
+</div>
+
+<div class="win" id="w-explica">
+  <div class="title"><h3 id="explica-title">Explicação</h3><button type="button" class="close" data-close="w-explica">&times;</button></div>
+  <div class="content"><p id="explica-texto"></p><div class="acts" id="explica-ver"></div></div>
+</div>
+
+<div class="win" id="w-frete">
+  <div class="title"><h3>Cadastrar Freighter Service</h3><button type="button" class="close" data-close="w-frete">&times;</button></div>
+  <div class="content">
+    <div id="frete-lista"></div>
+    <div class="acts"><button type="button" class="btn" id="frete-add">+ Adicionar freighter service</button></div>
+  </div>
+</div>
+
+<div class="win" id="w-frete-form">
+  <div class="title"><h3 id="ff-title">Freighter service</h3><button type="button" class="close" data-close="w-frete-form">&times;</button></div>
+  <div class="content">
+    <form id="ff-form">
+      <div class="campos">
+        <label>Nome <input type="text" name="nome" required></label>
+        <label>ISK por m³ <input type="number" step="any" min="0" name="iskM3"></label>
+        <label>% do colateral <input type="number" step="any" min="0" name="pctColat"></label>
+        <label>Frete mínimo por contrato (ISK) <input type="number" step="any" min="0" name="minimo"></label>
+      </div>
+      <div class="acts">
+        <button type="submit" class="btn">Salvar</button>
+        <button type="button" class="btn" data-close="w-frete-form">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="win largura-fixa" id="w-estr">
+  <div class="title"><h3>Cadastrar Estruturas</h3><button type="button" class="close" data-close="w-estr">&times;</button></div>
+  <div class="content">
+    <form class="estr-busca" id="estr-form">
+      <input type="search" id="estr-q" minlength="3" placeholder="Nome da estrutura (mín. 3 letras)">
+      <button type="submit" class="btn">Buscar</button>
+    </form>
+    <div id="estr-body"></div>
+    <h4>Cadastradas</h4>
+    <div id="estr-cad"></div>
+  </div>
+</div>
+
+<div class="win" id="w-estr-bonus">
+  <div class="title"><h3 id="eb-title">Estrutura</h3><button type="button" class="close" data-close="w-estr-bonus">&times;</button></div>
+  <div class="content">
+    <form id="eb-form">
+      <div class="campos" id="eb-campos"></div>
+      <div class="acts">
+        <button type="submit" class="btn">Salvar</button>
+        <button type="button" class="btn" data-close="w-estr-bonus">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="win" id="w-cred">
+  <div class="title"><h3>Créditos &amp; Licenças</h3><button type="button" class="close" data-close="w-cred">&times;</button></div>
+  <div class="content">
+    <h4>Papéis de parede</h4>
+    <div class="cred"><b>EVE Online — wallpaper 1</b><small>Arte oficial © CCP Games. Obtida via
+      <a href="https://wallpaperaccess.com/full/2045024.jpg" target="_blank" rel="noopener">wallpaperaccess.com/full/2045024.jpg</a></small></div>
+    <div class="cred"><b>EVE Online — wallpaper 2</b><small>Arte oficial © CCP Games. Obtida via
+      <a href="https://wallpaperaccess.com/full/2622303.jpg" target="_blank" rel="noopener">wallpaperaccess.com/full/2622303.jpg</a></small></div>
+    <div class="cred"><b>EVE Online — wallpaper 3</b><small>Arte oficial © CCP Games. Obtida via
+      <a href="https://wallpaperaccess.com/full/3122843.jpg" target="_blank" rel="noopener">wallpaperaccess.com/full/3122843.jpg</a></small></div>
+    <div class="cred"><b>EVE Online — wallpaper 4</b><small>Arte oficial © CCP Games. Obtida via
+      <a href="https://wallpaperaccess.com/full/3549235.jpg" target="_blank" rel="noopener">wallpaperaccess.com/full/3549235.jpg</a></small></div>
+    <div class="legal">EVE Online e todas as marcas relacionadas são propriedade da CCP Games.
+      Site de fã, sem fins lucrativos e sem vínculo com a CCP Games.</div>
+  </div>
+</div>
+
+<div class="win" id="w-import">
+  <div class="title"><h3>Importar dados</h3><button type="button" class="close" data-close="w-import">&times;</button></div>
+  <div class="content">
+    <p>Isso substituirá todos os dados salvos no navegador pelos do arquivo!</p>
+    <input type="file" id="import-arq" accept=".json,application/json" hidden>
+    <div class="acts">
+      <button type="button" class="btn" id="import-ok">Escolher arquivo</button>
+      <button type="button" class="btn" data-close="w-import">Cancelar</button>
+    </div>
+    <div class="nota" id="import-msg"></div>
+  </div>
+</div>
+
+<div class="win" id="w-fic">
+  <div class="title"><h3 id="fic-title">Personagem</h3><button type="button" class="close" data-close="w-fic">&times;</button></div>
+  <div class="content">
+    <h4>Personagens de comparação</h4>
+    <p>Saitama e Mr. Satan são personagens fictícios, que existem só na página, para comparar resultados:
+      o Saitama tem todas as skills no 5, e o Mr. Satan, todas no 0. Não precisam de login nem consultam a ESI.</p>
+    <p id="fic-nivel"></p>
+    <h4>Quem é</h4>
+    <p id="fic-desc"></p>
+    <div class="nota">Fonte: <a id="fic-fonte" target="_blank" rel="noopener"></a></div>
+  </div>
+</div>
+
+<div class="win" id="w-wipe">
+  <div class="title"><h3>Apagar dados</h3><button type="button" class="close" data-close="w-wipe">&times;</button></div>
+  <div class="content">
+    <p>Isso apagará todos os dados salvos no navegador! Você terá que refazer o login e baixar os estoques de novo!</p>
+    <div class="acts">
+      <button type="button" class="btn perigo alerta" id="wipe-ok">Apagar tudo</button>
+      <button type="button" class="btn" data-close="w-wipe">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="tray" class="vidro">
+  <button type="button" class="tb" id="wallbtn" title="Trocar papel de parede">
+    <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#trocar-wall"/></svg>
+  </button>
+  <div id="clock"><div class="t">--:--</div><div class="d">—</div></div>
+</div>
+
+<div id="ctx">
+  <button type="button" data-act="wall">Trocar papel de parede</button>
+  <button type="button" data-act="cred">Créditos da imagem</button>
+</div>
+
+<div id="badge" class="vidro"></div>
+
+<script src="../../assets/js/desktop.js"></script>
+<script src="calculeve.js"></script>
+<script src="sso.js"></script>
+<script src="estoque.js"></script>
+<script src="mercado.js"></script>
+<script src="nerds.js"></script>
+<script src="fuel.js"></script>
+<script src="t2.js"></script>
+<script src="estruturas.js"></script>
+<script src="frete.js"></script>
+</body>
+</html>
