@@ -45,16 +45,17 @@ Ctrl+Shift+R.
 
 ## Publicação no GitHub Pages
 
-- Criar um **segundo app** no portal de devs da CCP, com callback
-  `https://mileniumarchive.github.io/eve/calculeve/index.html`. O app atual fica com o callback local
-  (`http://localhost:8000/eve/calculeve/index.html`).
-- O `sso.js` passa a escolher o Client ID conforme o endereço em que a página está rodando.
-- Ativar no app novo os mesmos scopes do `sso.js`.
-- Conferir a Content-Security-Policy das páginas depois da publicação.
+O site está publicado em `https://mileniumarchive.github.io/`, e a Calculeve em
+`https://mileniumarchive.github.io/eve/calculeve/index.html`. São dois apps no portal de devs da CCP, um por
+callback, e o `sso.js` escolhe pelo endereço (§ Login do [README](README.md)).
 
-Efeito colateral já em vigor: com o callback do app atual trocado para o site local, o
-`python auth.py add` (adicionar char na planilha) não funciona mais. A renovação de token do
-`att.py` continua funcionando, porque não usa callback.
+Efeito colateral em vigor: com o callback do app local apontando para o site local, o `python auth.py add`
+(adicionar char na planilha) não funciona mais. A renovação de token do `att.py` continua funcionando, porque
+não usa callback.
+
+Falta conferir, com o site no ar: o login em cada char, a Content-Security-Policy no console e se o
+`localStorage` do endereço publicado começa vazio (origem nova, tokens não atravessam do localhost — e
+importar os de lá não resolve, porque refresh token é amarrado ao Client ID que o criou).
 
 ## Pendências conhecidas
 

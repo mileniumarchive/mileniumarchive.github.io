@@ -14,7 +14,13 @@
    ========================================================================== */
 var SSO = (function(){
   "use strict";
-  var CLIENT_ID = "7949c150858f4233b260e20da10ff099";
+  /* Um app por callback no portal de devs da CCP: o portal aceita um só por app, e o redirect que o site
+     manda é sempre o endereço da própria página. Então o que muda entre rodar local e publicado é o
+     Client ID (que é público por natureza; o secret não é usado, o login é PKCE). */
+  var APPS = { local: "7949c150858f4233b260e20da10ff099",        // callback http://localhost:8000/eve/calculeve/index.html
+               publicado: "c6a171f7502c41ecb4e382e538b396a2" };  // callback https://mileniumarchive.github.io/eve/calculeve/index.html
+  var LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+  var CLIENT_ID = LOCAL ? APPS.local : APPS.publicado;
   var SCOPES = "esi-markets.structure_markets.v1 esi-search.search_structures.v1 " +
                "esi-assets.read_assets.v1 esi-planets.manage_planets.v1 " +
                "esi-characters.read_blueprints.v1 esi-industry.read_character_jobs.v1 " +

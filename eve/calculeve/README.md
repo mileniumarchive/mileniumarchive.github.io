@@ -85,10 +85,11 @@ novo.
 OAuth2 Authorization Code com PKCE, que dispensa o client secret. O site usa o mesmo app do
 `auth.py` no portal de devs da CCP.
 
-- **Client ID:** fica em `sso.js` (é público por natureza).
+- **Client ID:** fica em `sso.js` (é público por natureza). São **dois apps**, porque o portal aceita um
+  callback por app: o `sso.js` usa o app local em `localhost` / `127.0.0.1` e o app publicado em qualquer
+  outro endereço. Endereço novo = app novo no portal e mais uma entrada em `APPS`.
 - **Callback:** o redirect enviado é o endereço da própria página, terminado em `index.html`, e
-  precisa ser idêntico ao callback cadastrado no app. O portal aceita **um** callback por app, então
-  cada endereço em que o site roda precisa do seu próprio app.
+  precisa ser idêntico ao callback cadastrado no app.
 - **Scopes:** lista em `sso.js`. Scope novo precisa ser ativado no app, no portal, e cada char
   precisa relogar.
 
