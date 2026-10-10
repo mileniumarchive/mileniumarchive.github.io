@@ -16,14 +16,17 @@ estoque.js      janela Estoque (assets + blueprints)
 mercado.js      preços de mercado e taxas (Mercado), comum a toda a Calculeve
 nerds.js        janela Números para Nerds (Nerds), comum a toda a Calculeve
 fuel.js         janela Fuel Blocks
-t2.js           janela Invenção T2 (invenção, decryptors, cadeia, insumos crus, resultado)
+t2.js           janela Invenção T2 (invenção, decryptors, cadeia, insumos crus, resultado); expõe o motor em `T2`
+brave.js        importa o CSV do Ship Overview da Brave (Brave)
+produzir.js     janela Produzir (blueprints do estoque sem invenção); reusa o motor do t2.js
 estruturas.js   janela Cadastrar Estruturas
 frete.js        janela Cadastrar Freighter Service
 sde/*.csv       cópia dos dumps do SDE
+Mudanças.md     log de mudanças, mostrado pela janela Log
 ```
 
 Ordem de carregamento: `desktop.js` → `calculeve.js` → `sso.js` → `estoque.js` → `mercado.js` → `nerds.js` → `fuel.js` →
-`t2.js` → `estruturas.js` → `frete.js`. O
+`t2.js` → `produzir.js` → `estruturas.js` → `frete.js`. O
 `calculeve.js` vem primeiro porque define o `CV`, usado pelos outros; a montagem da página espera o
 `DOMContentLoaded`, quando `SSO` já existe.
 
@@ -38,6 +41,7 @@ reescrito localmente:
 | `CV.iconeTipo(typeId, variante)` | ícone de item: `icon`, `bp` (BPO/fórmula) ou `bpc` |
 | `CV.sinal(v)` | classe de cor pelo sinal: `" pos"` (verde), `" neg"` (vermelho), `""` no zero |
 | `CV.dataHora(data)` | data no formato `dd/mm hh:mm` |
+| `CV.csv(texto)` | linhas de campos de um CSV (aspas, vírgula e quebra de linha dentro do campo); a primeira é o cabeçalho |
 | `CV.sde(arquivo, colunas)` | linhas de um CSV de `sde/`, só com as colunas pedidas (lido uma vez por arquivo) |
 | `CV.tipos()` | `typeID` → `{name, group, vol}`, do `invTypes.csv` |
 | `CV.esi(path, {token, body})` | chamada à ESI (POST quando há `body`); erro HTTP vira exceção com `.status` |
@@ -45,11 +49,27 @@ reescrito localmente:
 | `CV.limite(itens, n, fn)` | roda `fn` em cada item com no máximo `n` requisições simultâneas |
 | `CV.cacheado(chave, ids, busca)` | dado estático da ESI com cache no `localStorage` |
 | `CV.sistemas(ids)` | id do sistema → `{name, sec}` (cache `calculeve.cache.sistemas`) |
+| `CV.brave()` | `{membro, chars}`: se algum char logado está na Brave Collective ou na Brave United (`POST /characters/affiliation/`; ids das alianças por nome em `POST /universe/ids/`, cache `calculeve.cache.brave`) |
 | `CV.skills(char)` | Map `skill_id` → `active_skill_level` do char (`/characters/{id}/skills/`), uma consulta por char por carga da página |
+| `CV.niveis(char)` | níveis de skill do char escolhido: sem char, tudo 0; fictício, tudo no nível dele; senão, `CV.skills` |
+| `CV.fmt` | formatadores pt-BR: `int`, `qtd` (até 2 casas), `n2` (2 casas fixas), `pct` (1 casa) |
+| `CV.hms(seg)` | segundos → `h:mm:ss` |
+| `CV.status(corpo, msg)` | mensagem de uma linha no lugar do conteúdo de uma janela |
+| `CV.ATIV` | `activityID` do SDE: `FAB` (1), `INV` (8), `REAC` (11) |
+| `CV.industria()` | índice do SDE de indústria, lido uma vez: `produto`, `porProd`, `mat`, `tempo`, `prob`, `skills` e `k(act, bp)` |
+| `CV.bonusSkill()` | bônus de tempo por nível de Industry, Advanced Industry (`act` 1) e Reactions (`act` 11), do dogma |
+| `CV.tudao()` | estoque salvo do Tudão (`null` se não foi baixado) |
+| `CV.estoquePorTipo(snap)` | por tipo: `{ qt, locais }`, somando todos os chars |
+| `CV.blueprints(snap, T, aceita)` | blueprints do estoque que `aceita(typeID, copia)`, uma linha por (tipo, ME, TE, runs, BPO/BPC), ordenadas |
+| `CV.cartao(...)` / `CV.cartaoBp(b, nome, curto)` | cartão clicável das janelas de lista (ícone, nome curto, linha de dados) |
+| `CV.listaBps({ grid, nota, aceita, vazio, extraNota, aoAbrir, secoes, secao, prepara })` | janela de lista de blueprints do Tudão: aviso, cartões e o clique; usada por Invenção T2 e Produzir. Com `secoes` (títulos, em ordem) e `secao(b, T)`, separa em seções com título; `prepara(lista, T)` é async e roda antes; com `busca` (o `<input>` da janela), some o cartão que não casa e a seção que ficou vazia |
+| `CV.busca(input, aoMudar)` / `CV.contem(texto, termo)` | caixa de busca pelo nome: `busca` chama `aoMudar(termo)` a cada tecla e devolve um getter do termo; `contem` compara sem acento nem maiúscula (termo vazio casa tudo) |
+| `CV.igualaCartoes(raiz)` | põe todos os cartões de `raiz` na largura do maior texto (`--card-w`, medida na tela): grade regular |
+| `CV.grupos(ids)` | id do grupo → `{ n: nome, c: categoria }` (`/universe/groups/{id}/`), cache `calculeve.cache.gruposinfo` |
 | `CV.seletores(prefixo, chaves, aoTrocar)` | os quatro seletores (personagem, mercado, fábrica, freighter service) de uma janela; devolve `{ desenha, escolhido(id), fecha }` |
 
-**Seletores.** Quem usa põe no HTML, para cada seletor, um botão `<prefixo>-<id>-btn` e uma lista
-`<prefixo>-<id>-lista` (hidden), e chama `CV.seletores` com a chave de `localStorage` de cada escolha. O
+**Seletores.** Quem usa põe no HTML só um contêiner `<div class="escolhas" id="<prefixo>-escolhas">` e
+chama `CV.seletores` com a chave de `localStorage` de cada escolha; os botões e as listas são montados nele. O
 botão mostra a escolha salva, o **×** ao lado tira, e a conta de quem chamou segue sem ela. `aoTrocar` é
 opcional: o Fuel Blocks não usa (a escolha vale na próxima abertura da janela de materiais), a Invenção T2
 usa para refazer a conta na hora.
@@ -58,7 +78,8 @@ Imagem da CCP que não carrega recebe a classe `.falhou` e fica invisível.
 
 ## Área de trabalho
 
-Ícones: **Personagens**, **Estoque**, **Fuel Blocks** e **Invenção T2** (lado a lado), **Cadastrar
+Ícones: **Personagens**, **Estoque**, **Fuel Blocks**, **Invenção T2**, **Produzir** e **Brave** (lado a lado; o botão da Brave, com `assets/icons/Brave.png`, só aparece se
+pelo menos um char logado estiver na Brave Collective ou na Brave United, por `CV.brave()`, e abre a janela de importação do CSV), **Cadastrar
 Estruturas** e **Cadastrar Freighter Service** (lado a lado), **Apagar dados**, **Exportar dados** e
 **Importar dados** (lado a lado) e **Voltar à main**. Papéis de parede em
 `assets/wallpapers/calculeve/`, sorteados como no main, com crédito no selo e na janela Créditos.
@@ -75,6 +96,12 @@ Inclui os refresh tokens dos chars (`calculeve.chars`). O `sessionStorage` (logi
 `CV.FICTICIOS`, com nome, nível, imagem, descrição e fonte (wikis Fandom de One-Punch Man e Dragon Ball).
 Aparecem nos seletores de personagem e têm um botão cada na bandeja, ao lado do trocar papel de parede,
 que abre a janela com o que são (chars de comparação) e quem são, com a fonte.
+
+**Log.** Botão na bandeja, depois do Mr. Satan (ícone `log` do `ui.svg` + "Log"). Abre a janela Log, que lê o
+`Mudanças.md` (`fetch`, mesma origem) e mostra um ícone por log: cada linha `# ` do arquivo começa um log, e o texto
+dela é o nome do ícone, na ordem do arquivo. O ícone abre uma segunda janela com o título do log (ícone na cor do app)
+e o texto desenhado num markdown mínimo (`##`/`###`, listas com `- ` aninhadas por 2 espaços, `**negrito**`,
+`` `código` ``). Log novo = nova seção `# ` no `Mudanças.md`.
 
 **Apagar dados** remove do `localStorage` e do `sessionStorage` toda chave com prefixo
 `calculeve.` e recarrega a página. Depois disso é preciso refazer o login e baixar os estoques de
@@ -100,6 +127,7 @@ OAuth2 Authorization Code com PKCE, que dispensa o client secret. O site usa o m
 | `esi-industry.read_character_jobs.v1` | jobs de indústria (blueprints instaladas) |
 | `esi-universe.read_structures.v1` | nome e sistema de estruturas |
 | `esi-location.read_location.v1` | sistema atual do char |
+| `esi-fittings.read_fittings.v1` | fits salvos do char (teste: se a ESI devolve também os de corp/aliança) |
 | `esi-skills.read_skills.v1` | níveis de skill |
 | `esi-planets.manage_planets.v1` | colônias de PI |
 | `esi-markets.structure_markets.v1` | mercado de estrutura |
@@ -130,6 +158,11 @@ abre uma janela com duas abas.
 - Colunas: Nome, Qtd, Grupo, Volume, Preço est. (+ Char no Tudão). Item com nome próprio mostra o
   tipo ao lado.
 - Itens com flag `Implant` ou `Skill` não são listados (o jogo também não lista).
+
+**Busca.** A caixa ao lado das abas filtra pelo nome nas duas abas (sem acento, sem diferença de maiúscula) e
+zera ao abrir outro char. Em Personal Assets, o item casa pelo nome (ou pelo tipo, se tem nome próprio); ficam os
+locais com algum item que casa, já abertos, com o caminho até ele dentro de nave e container. O item que casa
+mostra tudo o que tem dentro. O contador do local conta só o que casou. Em Blueprints, filtra as linhas.
 
 **Blueprints** — mesmo agrupamento do bloco de blueprints da planilha: BPO/BPC com ME, TE e runs
 iguais viram uma linha; blueprint instalada em job aparece com a atividade e o horário de término.
@@ -185,7 +218,7 @@ Estoque antes. Sem Tudão salvo, a janela avisa.
 
 - **Quais blueprints:** as que têm, no `industryActivityProducts.csv`, fabricação (`activityID` 1)
   de um produto do grupo Fuel Block (`groupID` 1136 no `invTypes.csv`).
-- **Agrupamento:** blueprints com o mesmo tipo, BPO/BPC, ME e TE viram um ícone só; `QT` é quantas
+- **Agrupamento:** blueprints com o mesmo tipo, BPO/BPC, ME, TE e runs viram um ícone só; `QT` é quantas
   são. Entram só as blueprints em hangar (`/characters/{id}/blueprints/`).
 - **Ícone:** imagem de BPO ou BPC; em laranja, o nome do fuel block em cima e `ME / TE / QT` embaixo.
 - **Isótopos:** Helium, Hydrogen, Nitrogen e Oxygen Isotopes, sempre os quatro. `QT` é a soma de
@@ -272,14 +305,15 @@ do §4 do `DOC_planilha`.
 - **Jita 4-4** (`Mercado.jita(ids, forca)`): estação `60003760` (§2 do `DOC_planilha`); região achada
   pela ESI (estação → sistema → constelação → região, cache `calculeve.cache.regiao`). Por tipo,
   `/markets/{região}/orders/?type_id=` (público, sem token), só as ordens da estação: menor sell e maior
-  buy. Salvo em `calculeve.mercado.jita`; tipo que já está salvo não é baixado de novo, a não ser com
-  `forca`.
+  buy. Salvo em `calculeve.mercado.jita`; tipo que já está salvo não é baixado de novo. Com `forca`
+  (Atualizar preços) o salvo é descartado e só os tipos pedidos voltam.
 - **Volume** (`Mercado.volumes(ids)`): `packaged_volume` de `/universe/types/{id}/`, cache
   `calculeve.cache.volumes`.
 - **Frete** (`Mercado.frete(servico, preço, volume)`), por unidade, §4 do `DOC_planilha`:
   `MAX(ISK/m³ × volume ; % do colateral × preço)`. O frete mínimo por contrato é pago à parte e não entra.
   Sem serviço: 0.
-- **Exibição de ISK:** `Mercado.isk(v)` — 2 casas, com `k` (≥ mil), `m` (≥ milhão) e `bi` (≥ bilhão).
+- **Exibição de ISK:** `Mercado.isk(v)` — 2 casas, com `k` (≥ mil), `m` (≥ milhão) e `bi` (≥ bilhão); `Mercado.iskOuNaoTem(v)` mostra `NÃO TEM` para `null`.
+- **Preços da ESI:** `Mercado.precosEsi()` baixa `/markets/prices/` uma vez por carga da página (`average_price` no Estoque, `adjusted_price` no custo de job).
   Todo valor em ISK da Calculeve passa por ela (Fuel Blocks e o Preço est. do Estoque).
 
 ## Números para Nerds (nerds.js)
@@ -375,19 +409,65 @@ sinal.
 
 Depois, em grade (rótulo em cima, valor embaixo, centralizada na janela — como o bloco de parâmetros da
 invenção):
-**Compra (E)**, **Compra (J)** e **Custo dos jobs**; e depois **Total investido**, **Receita**, **Lucro** e
-**ROI**. A Compra (J) já leva o frete por unidade e o **frete mínimo por
-contrato**, pago uma vez; datacores e decryptor entram na Compra (E) ou na Compra (J), pela rota que cada um
+**Compra (E)**, **Compra (J)**, **Custo dos jobs** e **Obrigatório em Jita** (a parte da Compra (J) de itens
+sem ordem de venda na estrutura, que só se conseguem em Jita); e depois **Total investido**, **Receita**,
+**Lucro**, **ROI estrutura (sell)** e **ROI Jita (buy)**. A Compra (J) leva o frete por unidade; o frete mínimo por
+contrato não entra; datacores e decryptor entram na Compra (E) ou na Compra (J), pela rota que cada um
 escolhe. O total é tudo que o ciclo consome comprado, **estoque nenhum** — material tirado do estoque custa o
 que custaria comprar de novo, e contá-lo como zero inflaria o ROI de quem tem estoque. É esse total que o
 lucro, o ROI e a tabela de decryptors usam.
 
+Abaixo, o **histórico de 30 dias da região da estrutura** para o item produzido (`GET /markets/{região}/history/`,
+sem login; a região sai do sistema da estrutura cadastrada): **Preço médio** (média dos dias ponderada pelo
+volume) e **Qtd média por dia** (volume dos 30 dias ÷ 30; dia sem negociação conta zero). É a região inteira, não só
+a estrutura. Estrutura cadastrada sem sistema não mostra o histórico. **Atualizar preços** baixa de novo.
+
 **Números para Nerds.** O resto da conta: o saldo aberto, o **desembolso de hoje** (o que falta comprar
-depois do estoque, por rota, e o frete mínimo), a invenção em detalhe (datacores, decryptor, chance, cópias,
-unidades), a venda (as três rotas por unidade, receita, margem, horas de fila e ISK por hora de fila) e o
+depois do estoque, por rota), a invenção em detalhe (datacores, decryptor, chance, cópias,
+unidades), a venda (as rotas por unidade, receita, margem, horas de fila e ISK por hora de fila), o ROI de cada rota de venda e o da melhor rota e o
 rend/run com o tempo/run de cada nó da cadeia. A
 venda compara sell order no mercado, buy order no mercado e **Jita buy líquido menos o frete**. Buyback por
 contrato não entra — o site não tem programa de buyback cadastrado.
+
+## Produzir (produzir.js)
+
+A Invenção T2 sem a invenção: uma linha de produção normal, a partir de qualquer blueprint do estoque. Os
+quatro seletores do topo são os mesmos (chaves próprias, `calculeve.prod.*`); trocar qualquer um refaz a conta.
+
+A janela lista, do **estoque salvo do Tudão**, toda blueprint com fabricação (`activityID` 1), **BPO e
+BPC**, T1 e T2, uma por linha de ME/TE/runs (fórmula de reação fica de fora). Clicar numa abre o lote, com o
+campo **Runs**:
+
+Abre com **1 run**. Na **BPC** o teto é **cópias × runs da cópia** (a linha da lista soma as cópias
+idênticas), e o botão **Fazer máximo** põe o campo nesse teto; na **BPO** é livre e o botão não aparece.
+
+**Blueprint que você não tem.** Com algo digitado na busca, embaixo das blueprints do estoque aparece a seção
+**Blueprints que você não tem — BPO simulada**: as blueprints de fabricação publicadas do SDE (`published` do
+`invTypes.csv`) que casam com o termo e não estão no estoque, respeitando o botão Brave. Sem termo a seção não
+existe; com mais de 60 resultados desenha os 60 primeiros e pede pra refinar. O clique abre o lote como **BPO 0/0**,
+com os campos **ME** (0–10) e **TE** (0–20, de 2 em 2) editáveis: a conta é a mesma de uma BPO do estoque, na
+estrutura, mercado e char escolhidos nos seletores. Os nós abaixo da raiz continuam com o ME/TE das blueprints do
+estoque.
+
+A lista é dividida em seções pelo que a blueprint fabrica, pela categoria do grupo do produto (`CV.grupos`):
+**Naves** (categoria 6), **Rigs** (módulo de grupo `Rig …`), **Módulos** (categoria 7), **Munição** (categoria 8) e
+**Outros** (o resto: fuel blocks, componentes, drones…), nessa ordem; seção vazia não aparece.
+
+**Botão Brave** (canto superior direito, ao lado da busca): só existe se há um CSV da Brave importado
+(`Brave.naves()`). Ligado, a lista mostra só as blueprints que fabricam uma nave das doutrinas importadas
+(pelo typeID do produto); desligado, tudo. Ligado, embaixo da lista vem a seção **Blueprints que faltam para as
+naves das doutrinas**: as naves do CSV cujo produto nenhuma blueprint do estoque fabrica, sem clique, e sem as de
+meta **Faction** (que só existem como BPC), ordenadas por número de fits (mais fits primeiro; empate, ordem alfabética). A busca também filtra essa seção. Por enquanto só há o CSV de naves.
+
+**O que é reusado do `t2.js`** (exposto em `T2`): o motor `cenario` (árvore até a folha de compra, três vias,
+poda, custo de job, receita nas quatro rotas), as seções Cadeia, Insumos crus e Resultado, o
+Números para Nerds e a carga de preços (`T2.carrega`: mercado, Jita, volumes, skills, índices de custo). A lista de
+blueprints, o índice do SDE e o estoque vêm do `CV`. O `cenario` roda em modo `producao`: ME/TE são os da própria blueprint, as unidades são
+`runs × unidades por run`, e não há chance, cópias, datacores nem decryptor. Aqui a quantidade de cada material no
+ciclo (**Qtd no ciclo**) é sempre arredondada para cima, por job: `⌈runs × qtd por run⌉`.
+
+**Resultado e Nerds** são os da Invenção T2, sem os blocos de invenção e de decryptors. O item fabricado é o
+Resultado; a cadeia lista só o que ele consome.
 
 ## Cadastrar Estruturas (estruturas.js)
 
@@ -427,14 +507,28 @@ escolhido no Fuel Blocks entra no frete do CustoJita (`Mercado.frete`).
 | `calculeve.estruturas` | localStorage | `{mercado: [{id, name, type, sys, sistema, taxas}], industria: [{…, bonus}]}` |
 | `calculeve.fuel.char` / `.mercado` / `.fabrica` / `.frete` | localStorage | escolhas do Fuel Blocks (id do char / da estrutura) |
 | `calculeve.t2.char` / `.mercado` / `.fabrica` / `.frete` | localStorage | escolhas da Invenção T2 |
+| `calculeve.prod.char` / `.mercado` / `.fabrica` / `.frete` | localStorage | escolhas do Produzir |
 | `calculeve.mercado.<id>` | localStorage | `{ts, p: {typeID: [menor sell, maior buy]}}` da estrutura de mercado |
 | `calculeve.fretes` | localStorage | `[{id, nome, iskM3, pctColat, minimo}]` |
 | `calculeve.mercado.jita` | localStorage | `{ts, p: {typeID: [menor sell, maior buy]}}` de Jita 4-4, só dos tipos já consultados |
-| `calculeve.cache.regiao` / `calculeve.cache.volumes` | localStorage | região de Jita · volume embalado por tipo |
-| `calculeve.cache.grupos` | localStorage | nomes de grupo |
+| `calculeve.cache.regiao` / `calculeve.cache.regiaosis` / `calculeve.cache.volumes` | localStorage | região de Jita · região por sistema · volume embalado por tipo |
+| `calculeve.mercado.hist.<região>` | localStorage | `{ts, p: {typeID: [preço médio 30 dias, unidades por dia]}}`; refeito depois de 24 h |
+| `calculeve.brave.naves` | localStorage | `{ts, naves: [...]}` do CSV da Brave, inteiro |
+| `calculeve.cache.gruposinfo` | localStorage | nome e categoria de grupo |
 | `calculeve.cache.sistemas` | localStorage | nome e segurança de sistema |
 | `calculeve.cache.estacoes` | localStorage | nome e sistema de estação |
 | `calculeve.cache.estruturas` | localStorage | nome e sistema de estrutura |
+
+**Brave (brave.js).** O botão abre uma janela com **Escolher arquivo**: importa o CSV do Export CSV da tabela Ship
+Overview do site de doutrinas. Lê as 18 colunas pela posição (o "% Jita" aparece três vezes), tira o typeID da URL do
+ícone e salva tudo em `calculeve.brave.naves` (`{ts, naves: [...]}`); cada importação substitui a anterior, e um
+arquivo que não seja esse CSV é recusado sem mexer no salvo. As outras janelas leem por `Brave.naves()`.
+
+**Limpeza (`CV.limpaOrfaos()`).** Roda ao abrir a página e ao remover um char ou uma estrutura. Apaga o preço
+(`calculeve.mercado.<id>`) e o histórico da região de estrutura que não está mais cadastrada, o estoque
+(`calculeve.estoque.<char>`) de char que não está mais logado e o Tudão se ele leva o estoque de um char removido.
+Atualizar um estoque, o preço de uma estrutura ou o histórico sobrescreve a chave inteira. Os caches
+`calculeve.cache.*` são dado fixo da ESI e não são limpos.
 
 Todas começam com `calculeve.`, que é o prefixo apagado por "Apagar dados".
 

@@ -4,10 +4,10 @@
   var el = CV.el;
   var GRUPO_FUEL = 1136;                // groupID "Fuel Block" no invTypes
   var GRUPO_GELO = 423;                 // groupID "Ice Product": bloco Gelo; o resto da receita é PI
-  var FABRICACAO = "1";                 // activityID de fabricação nos industryActivity*.csv
+  var FABRICACAO = CV.ATIV.FAB;
   var ME_SEM_BP = 10;                   // ME usado quando o isótopo não tem blueprint no estoque
   var ISOTOPOS = ["Helium Isotopes", "Hydrogen Isotopes", "Nitrogen Isotopes", "Oxygen Isotopes"];
-  var fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+  var fmtInt = CV.fmt.int, hms = CV.hms, isk = Mercado.iskOuNaoTem;
 
   /* ---------------- escolhas: char que fabrica, mercado, fábrica e freighter service ----------------
      Componente comum (CV.seletores): cada escolha fica salva no navegador. */
@@ -38,110 +38,31 @@
 
 
 
-  /* níveis de skill do char escolhido: sem char, tudo 0; fictício, tudo no nível dele; senão, os da ESI (CV.skills) */
-  function skillsDe(c){
-    if (!c) return Promise.resolve(new Map());
-    if (c.ficticio) return Promise.resolve({ get: function(){ return c.nivel; } });
-    return CV.skills(c);
-  }
-
-  /* tempo base por run (s) de fabricação: typeID da blueprint -> segundos */
-  var temposP = null;
+  /* tempo base por run (s) de fabricação, do índice comum do SDE: .get(typeID da blueprint) -> segundos */
   function tempos(){
-    if (!temposP) temposP = CV.sde("industryActivity.csv", ["typeID", "activityID", "time"]).then(function(rows){
-      var m = new Map();
-      rows.forEach(function(r){ if (r[1] === FABRICACAO) m.set(Number(r[0]), Number(r[2])); });
-      return m;
-    });
-    return temposP;
+    return CV.industria().then(function(I){ return { get: function(bp){ return I.tempo.get(I.k(FABRICACAO, bp)); } }; });
   }
 
-  /* bônus de tempo por nível das skills, do SDE (dgm*.csv), em %:
-     Industry → atributo manufacturingTimeBonus; Advanced Industry → advancedIndustrySkillIndustryJobTimeBonus.
-     Promise de [{ skill: typeID, pct: % por nível (negativo = reduz) }] */
-  var SKILLS_TEMPO = [["Industry", "manufacturingTimeBonus"], ["Advanced Industry", "advancedIndustrySkillIndustryJobTimeBonus"]];
-  var bonusSkillP = null;
+  /* bônus de tempo por nível das skills de fabricação (CV.bonusSkill): [{ skill: typeID, nome, pct }] */
   function bonusSkill(){
-    if (!bonusSkillP) bonusSkillP = Promise.all([CV.tipos(),
-      CV.sde("dgmAttributeTypes.csv", ["attributeID", "attributeName"]),
-      CV.sde("dgmTypeAttributes.csv", ["typeID", "attributeID", "valueInt", "valueFloat"])]).then(function(r){
-        var T = r[0], idTipo = {}, idAttr = {};
-        T.forEach(function(t, id){ idTipo[t.name] = idTipo[t.name] || id; });
-        r[1].forEach(function(a){ idAttr[a[1]] = a[0]; });
-        var alvo = {};
-        SKILLS_TEMPO.forEach(function(s){ alvo[idTipo[s[0]] + "|" + idAttr[s[1]]] = { skill: idTipo[s[0]], nome: s[0] }; });
-        var out = [];
-        r[2].forEach(function(x){
-          var a = alvo[x[0] + "|" + x[1]];
-          if (a) out.push({ skill: a.skill, nome: a.nome, pct: Number(x[3] !== "" ? x[3] : x[2]) });
-        });
-        return out;
-      });
-    return bonusSkillP;
+    return CV.bonusSkill().then(function(l){ return l.filter(function(b){ return b.act === FABRICACAO; }); });
   }
 
-  /* segundos -> "h:mm:ss" (horas acumuladas, como o [hh]:mm:ss da planilha) */
-  function hms(seg){
-    seg = Math.round(seg);
-    var h = Math.floor(seg / 3600), m = Math.floor(seg % 3600 / 60), s = seg % 60;
-    return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
-  }
-
-  /* typeID da blueprint de fuel block -> [{ t: material, q: qtd base (ME 0) por run }].
+  /* typeID da blueprint de fuel block -> [{ t: material, q: qtd base (ME 0) por run }], do índice comum do SDE.
      PRODUTO (preenchido junto): typeID da blueprint -> { t: fuel block, q: unidades por run } */
   var receitasP = null, PRODUTO = new Map();
   function receitas(){
-    if (!receitasP) receitasP = Promise.all([CV.tipos(),
-      CV.sde("industryActivityProducts.csv", ["typeID", "activityID", "productTypeID", "quantity"]),
-      CV.sde("industryActivityMaterials.csv", ["typeID", "activityID", "materialTypeID", "quantity"])]).then(function(r){
-        var T = r[0], m = new Map();
-        r[1].forEach(function(p){
-          var prod = T.get(Number(p[2]));
-          if (p[1] === FABRICACAO && prod && prod.group === GRUPO_FUEL){
-            m.set(Number(p[0]), []);
-            PRODUTO.set(Number(p[0]), { t: Number(p[2]), q: Number(p[3]) });
-          }
-        });
-        r[2].forEach(function(x){
-          var l = x[1] === FABRICACAO && m.get(Number(x[0]));
-          if (l) l.push({ t: Number(x[2]), q: Number(x[3]) });
-        });
-        return m;
+    if (!receitasP) receitasP = CV.industria().then(function(I){
+      var m = new Map();
+      I.produto.forEach(function(p, k){
+        var par = k.split("|"), prod = I.T.get(p.t);
+        if (par[0] !== FABRICACAO || !prod || prod.group !== GRUPO_FUEL) return;
+        m.set(Number(par[1]), I.mat.get(k) || []);
+        PRODUTO.set(Number(par[1]), p);
       });
+      return m;
+    });
     return receitasP;
-  }
-
-  /* agrupa as idênticas: mesmo tipo, BPO/BPC, ME e TE */
-  function agrupa(snap, fuel){
-    var g = new Map();
-    snap.dados.forEach(function(d){
-      (d.bps || []).forEach(function(b){
-        if (!fuel.has(b.type_id)) return;
-        var q = b.quantity || 1, copia = (b.runs != null && b.runs > 0) || q === -2;
-        var me = b.material_efficiency || 0, te = b.time_efficiency || 0;
-        var k = [b.type_id, copia, me, te].join("|");
-        if (!g.has(k)) g.set(k, { t: b.type_id, copia: copia, me: me, te: te, qt: 0 });
-        g.get(k).qt += q > 0 ? q : 1;
-      });
-    });
-    return Array.from(g.values());
-  }
-
-  /* por tipo: quantidade total e locais (estação/estrutura/sistema, como no Estoque) que têm o item */
-  function somaEstoque(snap){
-    var assets = [].concat.apply([], snap.dados.map(function(d){ return d.assets || []; }));
-    var porId = new Map(); assets.forEach(function(a){ porId.set(a.item_id, a); });
-    function raiz(a){
-      var p;
-      while (a.location_type === "item" && (p = porId.get(a.location_id))) a = p;
-      return a.location_id;
-    }
-    var r = new Map();
-    assets.forEach(function(a){
-      if (!r.has(a.type_id)) r.set(a.type_id, { qt: 0, locais: new Set() });
-      var x = r.get(a.type_id); x.qt += a.quantity; x.locais.add(raiz(a));
-    });
-    return r;
   }
 
   /* ---------------- janela de materiais ---------------- */
@@ -202,7 +123,7 @@
     ultimo = null;
     var runs = Math.floor(Number(mRuns.value));
     mBody.innerHTML = "";
-    if (!(runs >= 1)){ mBody.appendChild(el("div", "status", "Runs precisa ser um inteiro maior que zero.")); return; }
+    if (!(runs >= 1)){ CV.status(mBody, "Runs precisa ser um inteiro maior que zero."); return; }
     var est = bonusEstrutura(), T = atual.T;
     mBp.textContent = "ME: " + atual.me + " / TE: " + atual.te;
     desenhaTempo(runs, est);
@@ -296,7 +217,6 @@
     if (!atual.px || !atual.tx) return "carregando…";
     return (lado === "compra" ? Mercado.compra : Mercado.venda)(atual.px.p[typeId], atual.tx);
   }
-  function isk(v){ return v == null ? "NÃO TEM" : Mercado.isk(v); }
   /* célula de duas linhas [[rótulo, valor], …]; texto no lugar se `v` for string */
   function celDupla(v, linhas){
     var td = el("td", "n preco");
@@ -385,7 +305,7 @@
     if (!este.merc) return;
     este.px = null; este.tx = null;
     var pP = forca ? Mercado.atualiza(este.merc) : Mercado.precos(este.merc);
-    Promise.all([pP, skillsDe(este.char).then(function(n){ return Mercado.taxas(este.merc, n); })]).then(function(r){
+    Promise.all([pP, CV.niveis(este.char).then(function(n){ return Mercado.taxas(este.merc, n); })]).then(function(r){
       if (atual !== este) return;
       este.px = r[0]; este.tx = r[1] || false;
       mPrecosTs.textContent = "Preços de " + este.merc.name + " — " + CV.dataHora(r[0].ts);
@@ -406,7 +326,7 @@
     var este = atual;
     carregaMercado(este, false);
     carregaJita(este, false);
-    Promise.all([tempos(), skillsDe(atual.char), bonusSkill()]).then(function(r){
+    Promise.all([tempos(), CV.niveis(atual.char), bonusSkill()]).then(function(r){
       if (atual !== este) return;
       este.base = r[0].get(este.bpTipo); este.skills = r[1]; este.bSkill = r[2]; desenhaMateriais();
     }, function(e){
@@ -426,25 +346,19 @@
   /* ---------------- janela Fuel Blocks ---------------- */
   async function desenha(){
     grid.innerHTML = ""; iso.innerHTML = ""; nota.textContent = "Carregando…";
-    var snap = CV.lsGet("calculeve.estoque.tudo", null);
+    var snap = CV.tudao();
     if (!snap){ nota.textContent = "Sem estoque do Tudão salvo. Atualize o Tudão no Estoque."; return; }
-    var T = await CV.tipos(), R = await receitas(), E = somaEstoque(snap);
+    var T = await CV.tipos(), R = await receitas(), E = CV.estoquePorTipo(snap);
     function curto(t){ return ((T.get(t) || {}).name || String(t)).replace(/ Fuel Block Blueprint$/, ""); }
-    var lista = agrupa(snap, R).sort(function(a, b){
-      return curto(a.t).localeCompare(curto(b.t)) || (a.copia - b.copia) || (b.me - a.me) || (b.te - a.te);
-    });
+    var lista = CV.blueprints(snap, T, function(t){ return R.has(t); });
     nota.textContent = "Estoque do Tudão de " + CV.dataHora(snap.ts) + ".";
 
     // blueprints
     if (!lista.length) grid.appendChild(el("div", "vazio", "Nenhuma blueprint de fuel block."));
     lista.forEach(function(b){
-      var ic = el("button", "icon bp"), nome = (T.get(b.t) || {}).name;
-      ic.title = nome + (b.copia ? " (BPC)" : " (BPO)");
-      ic.appendChild(CV.iconeTipo(b.t, b.copia ? "bpc" : "bp"));
-      ic.appendChild(el("span", "bp-nome", curto(b.t)));
-      ic.appendChild(el("span", "bp-dados", "ME: " + b.me + " / TE: " + b.te + " / QT: " + b.qt));
+      var ic = CV.cartaoBp(b, (T.get(b.t) || {}).name, curto(b.t));
       ic.addEventListener("click", function(){
-        abreMateriais({ bpTipo: b.t, me: b.me, te: b.te, nomeBp: nome + (b.copia ? " (BPC)" : ""), T: T, R: R, E: E });
+        abreMateriais({ bpTipo: b.t, me: b.me, te: b.te, nomeBp: (T.get(b.t) || {}).name + (b.copia ? " (BPC)" : ""), T: T, R: R, E: E });
       });
       grid.appendChild(ic);
     });
@@ -452,11 +366,9 @@
     // isótopos: a blueprint é a de fuel block que consome o isótopo; usa a de maior ME do estoque
     var porNome = new Map(); T.forEach(function(t, id){ if (ISOTOPOS.indexOf(t.name) >= 0) porNome.set(t.name, id); });
     ISOTOPOS.map(function(n){ return porNome.get(n); }).filter(function(id){ return id != null; }).forEach(function(id){
-      var x = E.get(id) || { qt: 0, locais: new Set() }, ic = el("button", "icon bp");
-      ic.title = T.get(id).name;
-      ic.appendChild(CV.iconeTipo(id, "icon"));
-      ic.appendChild(el("span", "bp-nome", T.get(id).name.replace(/ Isotopes$/, "")));
-      ic.appendChild(el("span", "bp-dados", "QT: " + fmtInt.format(x.qt) + " / Locais: " + x.locais.size));
+      var x = E.get(id) || { qt: 0, locais: new Set() };
+      var ic = CV.cartao(id, "icon", T.get(id).name.replace(/ Isotopes$/, ""),
+                         "QT: " + fmtInt.format(x.qt) + " / Locais: " + x.locais.size, T.get(id).name);
       ic.addEventListener("click", function(){
         var bpTipo = null;
         R.forEach(function(rec, bp){ if (rec.some(function(m){ return m.t === id; })) bpTipo = bp; });
@@ -471,6 +383,7 @@
       });
       iso.appendChild(ic);
     });
+    CV.igualaCartoes(grid.parentNode);
   }
 
   document.getElementById("ic-fuel").addEventListener("click", function(){

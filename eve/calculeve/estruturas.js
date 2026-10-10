@@ -31,7 +31,7 @@
     c[tipo] = c[tipo].filter(function(x){ return x.id !== e.id; }).concat([e]);
     grava(c);
   }
-  function remove(tipo, id){ var c = le(); c[tipo] = c[tipo].filter(function(x){ return x.id !== id; }); grava(c); }
+  function remove(tipo, id){ var c = le(); c[tipo] = c[tipo].filter(function(x){ return x.id !== id; }); grava(c); CV.limpaOrfaos(); }
 
   function desenhaCad(){
     var c = le(); cad.innerHTML = "";
@@ -80,7 +80,7 @@
     WIN.close("w-estr-bonus");
   });
 
-  function status(msg){ body.innerHTML = ""; body.appendChild(el("div", "status", msg)); }
+  function status(msg){ CV.status(body, msg); }
 
   /* busca com cada char logado: /characters/{id}/search/ com categoria structure.
      Devolve Map id da estrutura -> [chars que a encontraram] e os erros por char. */

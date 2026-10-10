@@ -24,7 +24,7 @@ var SSO = (function(){
   var SCOPES = "esi-markets.structure_markets.v1 esi-search.search_structures.v1 " +
                "esi-assets.read_assets.v1 esi-planets.manage_planets.v1 " +
                "esi-characters.read_blueprints.v1 esi-industry.read_character_jobs.v1 " +
-               "esi-universe.read_structures.v1 esi-skills.read_skills.v1 esi-location.read_location.v1";
+               "esi-universe.read_structures.v1 esi-skills.read_skills.v1 esi-location.read_location.v1 esi-fittings.read_fittings.v1";
   var AUTH_URL  = "https://login.eveonline.com/v2/oauth/authorize/";
   var TOKEN_URL = "https://login.eveonline.com/v2/oauth/token";
   var REDIRECT  = location.origin + location.pathname.replace(/\/$/, "/index.html");  // = callback do app no portal
@@ -122,5 +122,5 @@ var SSO = (function(){
     delete cache[id];
   }
 
-  return { login: login, retorno: retorno, token: token, tokens: tokens, chars: chars, remove: remove };
+  return { app: CLIENT_ID, login: login, retorno: retorno, token: token, tokens: tokens, chars: chars, remove: remove };
 })();

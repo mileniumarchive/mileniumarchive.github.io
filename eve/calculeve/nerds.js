@@ -23,9 +23,8 @@ var Nerds = (function(){
       "Comprar direto de uma sell order que já existe não paga taxa. Não desconta estoque: material tirado do " +
       "estoque custa o que custaria comprar de novo." },
     "Compra (J)": { t: "Compra (J) = soma, de cada item que o ciclo consome, de (quantidade do ciclo × (menor sell " +
-      "order de Jita 4-4 + frete por unidade)), para os itens em que Jita sai mais barato, mais o frete mínimo por " +
-      "contrato\n\nO frete por unidade é o do freighter service escolhido; o mínimo é pago uma vez, se houver " +
-      "qualquer compra em Jita.", ver: ["Compra (E)"] },
+      "order de Jita 4-4 + frete por unidade)), para os itens em que Jita sai mais barato\n\nO frete por unidade é o do freighter service " +
+      "escolhido. O frete mínimo por contrato não entra.", ver: ["Compra (E)"] },
     "Custo dos jobs": { t: "Custo dos jobs = soma, de cada job da cadeia, de (runs × EIV da receita × índice de " +
       "custo do sistema)\n\nO EIV é a receita em quantidade base (ME 0) pelo adjusted_price da ESI; o índice é o " +
       "da atividade (fabricação ou reação) no sistema da fábrica escolhida. O job de invenção não entra." },

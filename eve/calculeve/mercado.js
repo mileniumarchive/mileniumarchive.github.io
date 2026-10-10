@@ -12,12 +12,19 @@ var Mercado = (function(){
   function chave(id){ return "calculeve.mercado." + id; }
 
   /* valor em ISK arredondado: 2 casas, com k (mil), m (milhão) e bi (bilhão) */
-  var fmtIsk = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   var ESCALAS = [[1e9, " bi"], [1e6, " m"], [1e3, " k"]];
   function isk(v){
     var a = Math.abs(v);
-    for (var i = 0; i < ESCALAS.length; i++) if (a >= ESCALAS[i][0]) return fmtIsk.format(v / ESCALAS[i][0]) + ESCALAS[i][1];
-    return fmtIsk.format(v);
+    for (var i = 0; i < ESCALAS.length; i++) if (a >= ESCALAS[i][0]) return CV.fmt.n2.format(v / ESCALAS[i][0]) + ESCALAS[i][1];
+    return CV.fmt.n2.format(v);
+  }
+  function iskOuNaoTem(v){ return v == null ? "NÃO TEM" : isk(v); }
+
+  /* /markets/prices/ da ESI (average_price e adjusted_price de todo tipo), baixado uma vez por carga da página */
+  var precosEsiP = null;
+  function precosEsi(){
+    if (!precosEsiP) precosEsiP = CV.esiPaginado("/markets/prices/").catch(function(e){ precosEsiP = null; throw e; });
+    return precosEsiP;
   }
 
   /* preços salvos da estrutura: { ts, p: { typeID: [menor sell, maior buy] } } (null = sem ordem) */
@@ -50,20 +57,27 @@ var Mercado = (function(){
   var JITA = 60003760;               // Jita IV - Moon 4 - Caldari Navy Assembly Plant (§2 do DOC_planilha)
   var CHAVE_JITA = "calculeve.mercado.jita";
   var regiaoP = null;
-  /* região da estação: estação → sistema → constelação → região (cacheada no navegador) */
+  /* região de um sistema: sistema → constelação → região (cacheada no navegador) */
+  async function regiaoDoSistema(sis){
+    var c = await CV.cacheado("calculeve.cache.regiaosis", [sis], async function(id){
+      var sy = (await CV.esi("/universe/systems/" + id + "/")).json;
+      return (await CV.esi("/universe/constellations/" + sy.constellation_id + "/")).json.region_id;
+    });
+    if (!c[sis]) throw new Error("região do sistema " + sis + " não resolvida");
+    return c[sis];
+  }
+  /* região da estação: estação → sistema → região */
   function regiaoJita(){
     if (!regiaoP) regiaoP = CV.cacheado("calculeve.cache.regiao", [JITA], async function(id){
-      var st = (await CV.esi("/universe/stations/" + id + "/")).json;
-      var sy = (await CV.esi("/universe/systems/" + st.system_id + "/")).json;
-      return (await CV.esi("/universe/constellations/" + sy.constellation_id + "/")).json.region_id;
+      return regiaoDoSistema((await CV.esi("/universe/stations/" + id + "/")).json.system_id);
     }).then(function(c){ if (!c[JITA]){ regiaoP = null; throw new Error("região de Jita não resolvida"); } return c[JITA]; });
     return regiaoP;
   }
   /* { ts, p: { typeID: [menor sell, maior buy] } } de Jita 4-4 para os `ids`: baixa só os que faltam no salvo
      (todos, com `forca`), por /markets/{região}/orders/?type_id=, e salva no navegador */
   async function jita(ids, forca){
-    var s = CV.lsGet(CHAVE_JITA, null) || { ts: 0, p: {} };
-    var falta = forca ? ids : ids.filter(function(id){ return !(id in s.p); });
+    var s = forca ? { ts: 0, p: {} } : CV.lsGet(CHAVE_JITA, null) || { ts: 0, p: {} };   // atualizar descarta o que ficou salvo
+    var falta = ids.filter(function(id){ return !(id in s.p); });
     if (falta.length){
       var reg = await regiaoJita();
       await CV.limite(falta, 6, async function(id){
@@ -78,6 +92,29 @@ var Mercado = (function(){
       });
       s.ts = Date.now();
       CV.lsSet(CHAVE_JITA, s);
+    }
+    return s;
+  }
+
+  /* ---------- histórico da região (/markets/{região}/history/): últimos 30 dias, por tipo ----------
+     { ts, p: { typeID: [preço médio ponderado pelo volume, unidades por dia] } }. A ESI atualiza o histórico
+     uma vez por dia; o salvo com mais de 24 h é baixado de novo. Dia sem negociação conta como zero unidades. */
+  var DIAS_HIST = 30, DIA_MS = 864e5;
+  async function historico(regiao, ids, forca){
+    var chv = "calculeve.mercado.hist." + regiao, s = CV.lsGet(chv, null);
+    if (!s || forca || Date.now() - s.ts > DIA_MS) s = { ts: Date.now(), p: {} };
+    var falta = ids.filter(function(id){ return !(id in s.p); });
+    if (falta.length){
+      var corte = new Date(Date.now() - DIAS_HIST * DIA_MS).toISOString().slice(0, 10);
+      await CV.limite(falta, 6, async function(id){
+        var dias;
+        try { dias = (await CV.esi("/markets/" + regiao + "/history/?type_id=" + id)).json; }
+        catch(e){ if (e.status === 404) dias = []; else throw e; }
+        var vol = 0, isk = 0;
+        dias.forEach(function(d){ if (d.date > corte){ vol += d.volume; isk += d.average * d.volume; } });
+        s.p[id] = [vol ? isk / vol : null, vol / DIAS_HIST];
+      });
+      CV.lsSet(chv, s);
     }
     return s;
   }
@@ -121,5 +158,5 @@ var Mercado = (function(){
              buy:  par[1] == null ? null : par[1] * (1 + tx.broker) };
   }
 
-  return { isk: isk, jita: jita, volumes: volumes, frete: frete, salvos: salvos, atualiza: atualiza, precos: precos, taxas: taxas, venda: venda, compra: compra };
+  return { isk: isk, iskOuNaoTem: iskOuNaoTem, precosEsi: precosEsi, jita: jita, regiaoDoSistema: regiaoDoSistema, historico: historico, volumes: volumes, frete: frete, salvos: salvos, atualiza: atualiza, precos: precos, taxas: taxas, venda: venda, compra: compra };
 })();

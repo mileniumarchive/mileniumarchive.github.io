@@ -64,6 +64,7 @@ estende outro reaproveita o símbolo base com `<use>` dentro do `<symbol>`, sem 
 | `.icon`, `.btn`, `.app` | hover na cor do app |
 | `.alerta` | hover vermelho (ação destrutiva ou de saída); o X das janelas usa o mesmo |
 | `.vidro` | painel translúcido sobre o papel de parede |
+| `[hidden]` | esconde o elemento mesmo quando o CSS dele define `display` (ícones, cartões, seções filtradas) |
 | `.icon-linha` | põe ícones lado a lado dentro da coluna de ícones |
 | `.rota-e` / `.rota-j` | origem de compra: **estrutura** em ciano, **Jita** em rosa claro. Vale em qualquer página, no número e no rótulo |
 | `.mascara` + `.mascara-<nome>` | ícone PNG na cor do app: o PNG vira máscara (só o alfa conta) e a cor vem de `--accent`. PNG novo ganha uma classe `.mascara-<nome>` em `base.css` com `--mascara:url(../icons/<arquivo>.png)` |

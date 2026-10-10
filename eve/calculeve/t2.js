@@ -7,14 +7,12 @@
 (function(){
   "use strict";
   var el = CV.el;
-  var FAB = "1", INV = "8", REAC = "11";          // activityID nos industryActivity*.csv
+  var FAB = CV.ATIV.FAB, INV = CV.ATIV.INV, REAC = CV.ATIV.REAC;
   var GRUPO_DECRYPTOR = 1304;                     // groupID "Decryptors" no invTypes
   var BPC_ME = 2, BPC_TE = 4;                     // ME/TE de uma BPC inventada sem decryptor
   var FUNDO = 14;                                 // teto de profundidade da árvore (trava de segurança)
   var JOBS_PADRAO = 100;                          // jobs de invenção com que a janela abre
-  var fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-  var fmtQtd = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
-  var fmtPct = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  var fmtInt = CV.fmt.int, fmtQtd = CV.fmt.qtd, fmtPct = CV.fmt.pct, hms = CV.hms, isk = Mercado.iskOuNaoTem;
 
   /* ---------------- escolhas (CV.seletores), as mesmas do Fuel Blocks ---------------- */
   var SEL = CV.seletores("t2", { char: "calculeve.t2.char", merc: "calculeve.t2.mercado",
@@ -22,52 +20,7 @@
                          function(){ if (atual) recarrega(atual); });
   document.getElementById("w-t2").addEventListener("fechou", SEL.fecha);
 
-  /* ---------------- índices do SDE ----------------
-     produto  "act|bp"     -> { t: produto, q: unidades por run }
-     porProd  produto      -> [{ bp, act, q }]  (fabricação e reação)
-     mat      "act|bp"     -> [{ t: material, q: qtd base (ME 0) por run }]
-     tempo    "act|bp"     -> segundos por run
-     prob     bp           -> chance base de invenção
-     skills   bp           -> [skillID] exigidas pela invenção */
-  var idxP = null;
-  function idx(){
-    if (idxP) return idxP;
-    idxP = Promise.all([
-      CV.tipos(),
-      CV.sde("industryActivityProducts.csv", ["typeID", "activityID", "productTypeID", "quantity"]),
-      CV.sde("industryActivityMaterials.csv", ["typeID", "activityID", "materialTypeID", "quantity"]),
-      CV.sde("industryActivity.csv", ["typeID", "activityID", "time"]),
-      CV.sde("industryActivityProbabilities.csv", ["typeID", "activityID", "productTypeID", "probability"]),
-      CV.sde("industryActivitySkills.csv", ["typeID", "activityID", "skillID", "level"])
-    ]).then(function(r){
-      var I = { T: r[0], produto: new Map(), porProd: new Map(), mat: new Map(),
-                tempo: new Map(), prob: new Map(), skills: new Map() };
-      I.k = function(act, bp){ return act + "|" + bp; };
-      r[1].forEach(function(x){
-        var bp = Number(x[0]), p = { t: Number(x[2]), q: Number(x[3]) };
-        I.produto.set(I.k(x[1], bp), p);
-        if (x[1] === FAB || x[1] === REAC){
-          if (!I.porProd.has(p.t)) I.porProd.set(p.t, []);
-          I.porProd.get(p.t).push({ bp: bp, act: x[1], q: p.q });
-        }
-      });
-      r[2].forEach(function(x){
-        var kk = I.k(x[1], Number(x[0]));
-        if (!I.mat.has(kk)) I.mat.set(kk, []);
-        I.mat.get(kk).push({ t: Number(x[2]), q: Number(x[3]) });
-      });
-      r[3].forEach(function(x){ I.tempo.set(I.k(x[1], Number(x[0])), Number(x[2])); });
-      r[4].forEach(function(x){ if (x[1] === INV) I.prob.set(Number(x[0]), Number(x[3])); });
-      r[5].forEach(function(x){
-        if (x[1] !== INV) return;
-        var bp = Number(x[0]);
-        if (!I.skills.has(bp)) I.skills.set(bp, []);
-        I.skills.get(bp).push(Number(x[2]));
-      });
-      return I;
-    });
-    return idxP;
-  }
+  var idx = CV.industria;
 
   /* blueprint que fabrica (ou reação que produz) um item. Produto com mais de uma no dump fica com a que
      casa o nome — deduzir concatenando " Blueprint" erra nas reações (§3 do DOC_planilha). */
@@ -107,38 +60,7 @@
     return decsP;
   }
 
-  /* bônus de tempo por nível, do SDE: Industry e Advanced Industry na fabricação, Reactions na reação */
-  var SKILLS_TEMPO = [["Industry", "manufacturingTimeBonus", FAB],
-                      ["Advanced Industry", "advancedIndustrySkillIndustryJobTimeBonus", FAB],
-                      ["Reactions", "reactionTimeBonus", REAC]];
-  var bSkillP = null;
-  function bonusSkill(){
-    if (bSkillP) return bSkillP;
-    bSkillP = Promise.all([CV.tipos(),
-      CV.sde("dgmAttributeTypes.csv", ["attributeID", "attributeName"]),
-      CV.sde("dgmTypeAttributes.csv", ["typeID", "attributeID", "valueInt", "valueFloat"])]).then(function(r){
-        var idTipo = {}, idAttr = {}, alvo = {}, out = [];
-        r[0].forEach(function(t, id){ if (!idTipo[t.name]) idTipo[t.name] = id; });
-        r[1].forEach(function(a){ idAttr[a[1]] = a[0]; });
-        SKILLS_TEMPO.forEach(function(s){ alvo[idTipo[s[0]] + "|" + idAttr[s[1]]] = { skill: idTipo[s[0]], nome: s[0], act: s[2] }; });
-        r[2].forEach(function(x){
-          var a = alvo[x[0] + "|" + x[1]];
-          if (a) out.push({ skill: a.skill, nome: a.nome, act: a.act, pct: Number(x[3] !== "" ? x[3] : x[2]) });
-        });
-        return out;
-      });
-    return bSkillP;
-  }
-
   /* ---------------- estoque salvo do Tudão ---------------- */
-  /* quantidade por tipo, somando todos os chars e locais */
-  function somaEstoque(snap){
-    var r = new Map();
-    snap.dados.forEach(function(d){
-      (d.assets || []).forEach(function(a){ r.set(a.type_id, (r.get(a.type_id) || 0) + a.quantity); });
-    });
-    return r;
-  }
   /* blueprints em hangar: typeID da BP -> { me, te } da melhor (maior ME, depois maior TE) */
   function bpsDoEstoque(snap){
     var r = new Map();
@@ -150,25 +72,9 @@
     });
     return r;
   }
-  /* as BPCs T1 do estoque que têm invenção: uma linha por (tipo, ME, TE, runs), com a quantidade */
-  function bpcsInventaveis(snap, I){
-    var g = new Map();
-    snap.dados.forEach(function(d){
-      (d.bps || []).forEach(function(b){
-        var copia = (b.runs != null && b.runs > 0) || b.quantity === -2;
-        if (!copia || !I.produto.has(I.k(INV, b.type_id))) return;
-        var me = b.material_efficiency || 0, te = b.time_efficiency || 0;
-        var k = [b.type_id, me, te, b.runs].join("|");
-        if (!g.has(k)) g.set(k, { t: b.type_id, me: me, te: te, runs: b.runs, qt: 0 });
-        g.get(k).qt += b.quantity > 0 ? b.quantity : 1;
-      });
-    });
-    return Array.from(g.values());
-  }
-
   /* ---------------- bônus da fábrica escolhida ---------------- */
-  function bonusFabrica(){
-    var f = SEL.escolhido("fab");
+  function bonusFabrica(sel){
+    var f = sel.escolhido("fab");
     if (!f) return { meFab: 1, meReac: 1, teFab: 1, teReac: 1, sys: null, nome: null };
     var b = f.bonus || {};
     function p(k){ return (Number(b[k]) || 0) / 100; }
@@ -181,16 +87,10 @@
      EIV do job = Σ (qtd base ME 0 × adjusted_price de /markets/prices/); custo/run = EIV × índice da
      atividade no sistema da estrutura escolhida (/industry/systems/). Sem fábrica escolhida, 0. */
   var sistemasP = null, ajustadosP = null;
-  /* endpoint sem token que pode ou não vir paginado: pega a primeira página e as demais, se houver */
-  async function todas(path){
-    var r = await CV.esi(path), out = r.json;
-    for (var p = 2; p <= r.pages; p++) out = out.concat((await CV.esi(path + "?page=" + p)).json);
-    return { json: out };
-  }
   function indicesSistema(){
-    if (!sistemasP) sistemasP = todas("/industry/systems/").then(function(r){
+    if (!sistemasP) sistemasP = CV.esiPaginado("/industry/systems/").then(function(l){
       var m = new Map();
-      r.json.forEach(function(s){
+      l.forEach(function(s){
         var a = {};
         (s.cost_indices || []).forEach(function(c){ a[c.activity] = c.cost_index; });
         m.set(s.solar_system_id, a);
@@ -200,9 +100,9 @@
     return sistemasP;
   }
   function precosAjustados(){
-    if (!ajustadosP) ajustadosP = todas("/markets/prices/").then(function(r){
+    if (!ajustadosP) ajustadosP = Mercado.precosEsi().then(function(l){
       var m = new Map();
-      r.json.forEach(function(p){ if (p.adjusted_price != null) m.set(p.type_id, p.adjusted_price); });
+      l.forEach(function(p){ if (p.adjusted_price != null) m.set(p.type_id, p.adjusted_price); });
       return m;
     });
     return ajustadosP;
@@ -225,13 +125,6 @@
     function lv(s){ return s ? (niveis.get(s.id) || 0) : 0; }
     var soma = sk.sci.reduce(function(a, s){ return a + lv(s); }, 0);
     return base * (1 + soma / 30 + lv(sk.enc) / 40) * mult;
-  }
-
-  /* segundos -> "h:mm:ss" */
-  function hms(seg){
-    seg = Math.round(seg);
-    var h = Math.floor(seg / 3600), m = Math.floor(seg % 3600 / 60), s = seg % 60;
-    return h + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
   }
 
   /* ==========================================================================
@@ -274,14 +167,21 @@
     var I = ctx.I;
     var c = { dec: dec, nos: [], crus: [], aviso: null };
 
-    /* invenção */
-    c.chance = chanceDe(ctx.chanceBase, ctx.sk, ctx.niveis, dec.prob);
-    c.runsBPC = ctx.runsBase + dec.runs;
-    c.copias = Math.floor(ctx.jobs * c.chance);
-    c.me = BPC_ME + dec.me;
-    c.te = BPC_TE + dec.te;
-    c.unidades = c.copias * c.runsBPC * ctx.qRun;
-    c.alvo = c.unidades + ctx.sobra * ctx.qRun;
+    /* invenção — ou, na janela Produzir (ctx.producao), a própria blueprint: ME/TE dela, `runs` do lote,
+       sem chance, cópias, datacores nem decryptor */
+    if (ctx.producao){
+      c.chance = null; c.runsBPC = ctx.runs; c.copias = null;
+      c.me = ctx.meBp; c.te = ctx.teBp;
+      c.unidades = ctx.runs * ctx.qRun; c.alvo = c.unidades;
+    } else {
+      c.chance = chanceDe(ctx.chanceBase, ctx.sk, ctx.niveis, dec.prob);
+      c.runsBPC = ctx.runsBase + dec.runs;
+      c.copias = Math.floor(ctx.jobs * c.chance);
+      c.me = BPC_ME + dec.me;
+      c.te = BPC_TE + dec.te;
+      c.unidades = c.copias * c.runsBPC * ctx.qRun;
+      c.alvo = c.unidades + ctx.sobra * ctx.qRun;
+    }
 
     /* árvore e custo das três vias, de baixo para cima */
     var nos = arvore(I, ctx.item, ctx.bpT2);
@@ -326,11 +226,14 @@
     var ordem = Array.from(nos.values()).sort(function(a, b){ return a.prof - b.prof; });
     ordem.forEach(function(no){
       no.v = memo.get(no.tipo);
-      no.estoque = ctx.E.get(no.tipo) || 0;
+      no.estoque = (ctx.E.get(no.tipo) || { qt: 0 }).qt;
       no.demanda = 0; no.dem0 = 0; no.ativo = false; no.runs = 0; no.runs0 = 0; no.comprar = 0; no.sobra = 0;
       no.tempo = no.bp ? tempoRun(ctx, no, te(no)) : null;
     });
     /* a raiz é sempre construída: a BPC saiu da invenção, não se compra o T2 para "fabricar" */
+    /* na janela Produzir o material de um job é sempre inteiro: arredonda para cima (a tolerância evita que
+       12,0000000001 vire 13) */
+    function porJob(x){ return ctx.producao ? Math.ceil(x - 1e-9) : x; }
     var raiz = nos.get(ctx.item);
     raiz.ativo = true; raiz.demanda = c.alvo; raiz.dem0 = c.alvo; raiz.estoque = 0;
     if (raiz.v.produzir != null) raiz.v.decisao = "CONSTRUIR (BPC)";
@@ -346,8 +249,8 @@
           var filho = nos.get(m.t), q = qtdEfetiva(m.q, meDe(m.t), no.act, ctx.bonus);
           if (!filho) return;
           filho.ativo = true;
-          filho.demanda += q * no.runs;
-          filho.dem0 += q * no.runs0;
+          filho.demanda += porJob(q * no.runs);
+          filho.dem0 += porJob(q * no.runs0);
         });
       } else {
         no.comprar = Math.max(0, Math.ceil(no.demanda) - no.estoque);
@@ -359,6 +262,7 @@
          material tirado do estoque custa o que custaria comprar de novo;
        — falta: só o que o estoque não cobre. É o desembolso de hoje, e mora no Números para Nerds. */
     c.compraE = 0; c.compraJ = 0; c.faltaE = 0; c.faltaJ = 0;
+    c.soJita = 0;                                  // parte da Compra (J) sem ordem de venda na estrutura: só dá em Jita
     c.custoJobs = 0; c.custoJobs0 = 0; c.horas = 0; c.semPreco = false;
     ordem.forEach(function(no){
       (no.bp ? c.nos : c.crus).push(no);
@@ -372,39 +276,44 @@
       if (no.v.melhor == null){ if (no.dem0 > 0) c.semPreco = true; return; }
       var naEstrutura = no.v.melhor === no.v.estr;
       if (naEstrutura){ c.compraE += Math.ceil(no.dem0) * no.v.estr; c.faltaE += no.comprar * no.v.estr; }
-      else { c.compraJ += Math.ceil(no.dem0) * no.v.jita; c.faltaJ += no.comprar * no.v.jita; }
+      else {
+        c.compraJ += Math.ceil(no.dem0) * no.v.jita; c.faltaJ += no.comprar * no.v.jita;
+        if (no.v.estr == null) c.soJita += Math.ceil(no.dem0) * no.v.jita;
+      }
     });
     c.nos.sort(function(a, b){ return a.prof - b.prof; });
     c.crus.sort(function(a, b){ return ctx.nome(a.tipo).localeCompare(ctx.nome(b.tipo)); });
 
     /* invenção: datacores por job e o decryptor, cada um na rota que ele mesmo escolhe */
-    function poeNaRota(r, total){
+    function poeNaRota(r, total, tipo){
       if (r == null || total == null) return;
       if (r.rota === "E"){ c.compraE += total; c.faltaE += total; }
-      else { c.compraJ += total; c.faltaJ += total; }
+      else {
+        c.compraJ += total; c.faltaJ += total;
+        if (ctx.precoCompra(tipo, "sell") == null) c.soJita += total;
+      }
     }
-    c.datacores = (I.mat.get(I.k(INV, ctx.bp)) || []).map(function(m){
+    c.datacores = (ctx.producao ? [] : I.mat.get(I.k(INV, ctx.bp)) || []).map(function(m){
       var r = ctx.rotaSimples(m.t), total = r == null ? null : r.valor * m.q * ctx.jobs;
-      poeNaRota(r, total);
+      poeNaRota(r, total, m.t);
       return { t: m.t, q: m.q, un: r && r.valor, rota: r && r.rota, total: total };
     });
     c.custoDatacores = c.datacores.reduce(function(a, d){ return d.total == null ? a : a + d.total; }, 0);
     c.rotaDec = dec.t == null ? null : ctx.rotaSimples(dec.t);
     c.precoDec = c.rotaDec ? c.rotaDec.valor : 0;
     c.custoDec = dec.t == null ? 0 : (c.rotaDec == null ? null : c.rotaDec.valor * ctx.jobs);
-    if (dec.t != null) poeNaRota(c.rotaDec, c.custoDec);
+    if (dec.t != null) poeNaRota(c.rotaDec, c.custoDec, dec.t);
     c.custoInvencao = c.custoDatacores + (c.custoDec || 0);
-
-    /* frete mínimo por contrato: pago uma vez, se houver qualquer compra em Jita (§4 do DOC_planilha) */
-    var serv = ctx.servicoFrete();
-    c.freteMinimo = serv && c.compraJ > 0 ? Number(serv.minimo) || 0 : 0;
-    if (c.freteMinimo){ c.compraJ += c.freteMinimo; if (c.faltaJ > 0) c.faltaJ += c.freteMinimo; }
 
     c.desembolso = c.faltaE + c.faltaJ + c.custoJobs;
     c.custo = c.compraE + c.compraJ + c.custoJobs0;
     c.receita = ctx.receita(c.unidades);
     c.lucro = c.receita.valor == null ? null : c.receita.valor - c.custo;
     c.roi = c.lucro == null || !c.custo ? null : c.lucro / c.custo;
+    /* ROI de cada rota de venda, na ordem de `receita.rotas` (SellMerc, BuyMerc, SellJita, BuyJita) */
+    c.rois = c.receita.rotas.map(function(r){
+      return r.un == null || !c.custo ? null : (r.un * c.unidades - c.custo) / c.custo;
+    });
     c.margem = c.lucro == null || !c.receita.valor ? null : c.lucro / c.receita.valor;
     c.iskHora = c.lucro == null || !c.horas ? null : c.lucro / c.horas;
     return c;
@@ -422,7 +331,11 @@
       jTs = document.getElementById("t2j-precos-ts"), jBtn = document.getElementById("t2j-precos-btn"),
       jNerd = document.getElementById("t2j-nerd-btn");
 
-  function isk(v){ return v == null ? "NÃO TEM" : Mercado.isk(v); }
+  /* as seções abaixo desenham em `jBody`/`jAviso`; a janela Produzir (produzir.js) reusa as mesmas funções
+     apontando-os para os elementos dela, com T2.corpo, no início de cada desenho */
+  var CORPO_T2 = jBody, AVISO_T2 = jAviso;
+  function corpo(b, a){ jBody = b; jAviso = a; }
+
   function pct(v){ return v == null ? "—" : fmtPct.format(v * 100) + "%"; }
 
   /* preços do mercado escolhido e de Jita, no formato que o motor usa: número ou null */
@@ -441,7 +354,7 @@
       if (s == null) return null;
       return s + Mercado.frete(ctx.servicoFrete(), s, (ctx.vol || {})[tipo] || 0);
     };
-    ctx.servicoFrete = function(){ var f = SEL.escolhido("frete"); return f && f.f; };
+    ctx.servicoFrete = function(){ var f = ctx.sel.escolhido("frete"); return f && f.f; };
     /* compra melhor de um item solto (datacore, decryptor): MIN(estrutura ; Jita + frete), com a rota */
     ctx.rotaSimples = function(tipo){
       var e = ctx.precoCompra(tipo, "sell"), j = ctx.precoJita(tipo);
@@ -648,9 +561,13 @@
     linhaDelta("Delta por unidade (rota − produzir)", 1);
     linhaDelta("Delta do ciclo (unidades × delta)", c.unidades);
     grade([["Compra (E)", isk(c.compraE), "rota-e"], ["Compra (J)", isk(c.compraJ), "rota-j"],
-           ["Custo dos jobs", isk(c.custoJobs0)]], 3);
+           ["Custo dos jobs", isk(c.custoJobs0)], ["Obrigatório em Jita", isk(c.soJita), "rota-j"]], 3);
     grade([["Total investido", isk(c.custo)], ["Receita", isk(c.receita.valor)],
-           ["Lucro", isk(c.lucro), CV.sinal(c.lucro).trim()], ["ROI", pct(c.roi), CV.sinal(c.roi).trim()]], 4);
+           ["Lucro", isk(c.lucro), CV.sinal(c.lucro).trim()],
+           ["ROI estrutura (sell)", pct(c.rois[0]), CV.sinal(c.rois[0]).trim()],
+           ["ROI Jita (buy)", pct(c.rois[3]), CV.sinal(c.rois[3]).trim()]], 5);
+    if (ctx.hist) grade([["Preço médio — 30 dias", ctx.hist[0] == null ? "SEM VENDAS" : isk(ctx.hist[0])],
+                         ["Qtd média por dia — 30 dias", fmtQtd.format(ctx.hist[1])]], 2);
     if (c.semPreco) jAviso.textContent = "Algum item da cadeia não tem ordem em nenhuma das duas rotas: o total investido sai por baixo.";
   }
 
@@ -659,13 +576,15 @@
     var g1 = [["Compra (E)", c.compraE], ["Compra (J)", c.compraJ], ["Custo dos jobs", c.custoJobs0],
               ["Total investido", c.custo], ["Lucro", c.lucro]];
     var g2 = [["Desembolso do ciclo", c.desembolso], ["Desembolso — estrutura", c.faltaE],
-              ["Desembolso — Jita", c.faltaJ], ["Frete mínimo por contrato", c.freteMinimo],
+              ["Desembolso — Jita", c.faltaJ],
               ["Custo dos jobs — só o que falta fabricar", c.custoJobs]];
-    var g3 = [["Invenção — datacores", c.custoDatacores], ["Invenção — decryptor", c.custoDec],
-              ["Chance de invenção", pct(c.chance)], ["Cópias esperadas", fmtInt.format(c.copias)],
-              ["Unidades no ciclo", fmtInt.format(c.unidades)]];
+    var g3 = ctx.producao ? [["Unidades no ciclo", fmtInt.format(c.unidades)]]
+      : [["Invenção — datacores", c.custoDatacores], ["Invenção — decryptor", c.custoDec],
+         ["Chance de invenção", pct(c.chance)], ["Cópias esperadas", fmtInt.format(c.copias)],
+         ["Unidades no ciclo", fmtInt.format(c.unidades)]];
     var g4 = c.receita.rotas.map(function(r){ return [r.nome + " (un)", r.un]; })
-      .concat([["Receita", c.receita.valor], ["Margem", pct(c.margem)],
+      .concat(c.receita.rotas.map(function(r, i){ return ["ROI — " + r.nome, pct(c.rois[i])]; }))
+      .concat([["ROI — melhor rota", pct(c.roi)], ["Receita", c.receita.valor], ["Margem", pct(c.margem)],
                ["Horas de fila", c.horas ? fmtQtd.format(c.horas) + " h" : "—"],
                ["ISK por hora de fila", c.iskHora]]);
     var g5 = c.nos.map(function(no){
@@ -678,12 +597,13 @@
   /* ---------------- desenho: roda os cenários e mostra o vencedor por ROI ---------------- */
   function desenha(){
     if (!atual) return;
+    corpo(CORPO_T2, AVISO_T2);
     var ctx = atual;
     jBody.innerHTML = ""; jAviso.textContent = ""; ultimo = null;
     ctx.jobs = Math.floor(Number(jJobs.value));
     ctx.sobra = Math.max(0, Math.floor(Number(jSobra.value)) || 0);
-    if (!(ctx.jobs >= 1)){ jBody.appendChild(el("div", "status", "Jobs precisa ser um inteiro maior que zero.")); return; }
-    if (!ctx.niveis || !ctx.bSkill || !ctx.decs){ jBody.appendChild(el("div", "status", "Carregando skills e decryptors…")); return; }
+    if (!(ctx.jobs >= 1)){ CV.status(jBody, "Jobs precisa ser um inteiro maior que zero."); return; }
+    if (!ctx.niveis || !ctx.bSkill || !ctx.decs){ CV.status(jBody, "Carregando skills e decryptors…"); return; }
     if (!ctx.merc) jAviso.textContent = "Sem mercado escolhido: nenhum preço, nenhuma decisão.";
 
     var cs = ctx.decs.map(function(d){ return cenario(ctx, d); });
@@ -703,40 +623,54 @@
     secResultado(ctx, vencedor);
   }
 
+  /* liga o lote às escolhas e aos elementos da janela que o mostra (Invenção T2 ou Produzir) */
+  function ligaJanela(ctx, sel, ui, ativo, redesenha){
+    ctx.sel = sel; ctx.ui = ui; ctx.ativo = ativo; ctx.redesenha = redesenha;
+    ligaPrecos(ctx);
+  }
+
   /* ---------------- carga: preços do mercado, Jita, volumes, skills, índices de custo ---------------- */
   function recarrega(ctx, forca){
-    ctx.merc = SEL.escolhido("merc");
-    ctx.bonus = bonusFabrica();
-    ctx.px = null; ctx.tx = null; jTs.textContent = "";
+    ctx.merc = ctx.sel.escolhido("merc");
+    ctx.char = ctx.sel.escolhido("char");
+    ctx.bonus = bonusFabrica(ctx.sel);
+    ctx.px = null; ctx.tx = null; ctx.ui.ts.textContent = "";
     var este = ctx;
 
-    var skillsP = ctx.char ? (ctx.char.ficticio ? Promise.resolve({ get: function(){ return ctx.char.nivel; } }) : CV.skills(ctx.char))
-                           : Promise.resolve(new Map());
-    Promise.all([skillsP, bonusSkill(), decryptors()]).then(function(r){
-      if (atual !== este) return;
-      este.niveis = r[0]; este.bSkill = r[1]; este.decs = r[2]; desenha();
-    }, function(e){ console.error(e); if (atual === este){ jAviso.textContent = "Erro nas skills: " + e.message; } });
+    var skillsP = CV.niveis(ctx.char);
+    Promise.all([skillsP, CV.bonusSkill(), ctx.producao ? Promise.resolve([]) : decryptors()]).then(function(r){
+      if (!este.ativo()) return;
+      este.niveis = r[0]; este.bSkill = r[1]; este.decs = r[2]; este.redesenha();
+    }, function(e){ console.error(e); if (este.ativo()){ este.ui.aviso.textContent = "Erro nas skills: " + e.message; } });
 
     if (ctx.merc){
       Promise.all([forca ? Mercado.atualiza(ctx.merc) : Mercado.precos(ctx.merc), skillsP.then(function(n){ return Mercado.taxas(ctx.merc, n); })])
         .then(function(r){
-          if (atual !== este) return;
+          if (!este.ativo()) return;
           este.px = r[0]; este.tx = r[1];
-          jTs.textContent = "Preços de " + este.merc.name + " — " + CV.dataHora(r[0].ts) +
+          este.ui.ts.textContent = "Preços de " + este.merc.name + " — " + CV.dataHora(r[0].ts) +
                             (este.tx ? "" : " · falta o broker do dono da estrutura");
-          desenha();
-        }, function(e){ console.error(e); if (atual === este){ este.px = e; jTs.textContent = "Erro nos preços: " + e.message; desenha(); } });
+          este.redesenha();
+        }, function(e){ console.error(e); if (este.ativo()){ este.px = e; este.ui.ts.textContent = "Erro nos preços: " + e.message; este.redesenha(); } });
     }
 
+    ctx.hist = null;
+    if (ctx.merc && ctx.merc.sys) Mercado.regiaoDoSistema(ctx.merc.sys).then(function(reg){
+      return Mercado.historico(reg, [ctx.item], forca);
+    }).then(function(s){
+      if (!este.ativo()) return;
+      este.hist = s.p[este.item] || null; este.redesenha();
+    }, function(e){ console.error(e); });
+
     Promise.all([Mercado.jita(ctx.ids, forca), Mercado.volumes(ctx.ids)]).then(function(r){
-      if (atual !== este) return;
-      este.jita = r[0]; este.vol = r[1]; desenha();
-    }, function(e){ console.error(e); if (atual === este){ este.jita = e; desenha(); } });
+      if (!este.ativo()) return;
+      este.jita = r[0]; este.vol = r[1]; este.redesenha();
+    }, function(e){ console.error(e); if (este.ativo()){ este.jita = e; este.redesenha(); } });
 
     if (ctx.bonus.sys) Promise.all([indicesSistema(), precosAjustados()]).then(function(r){
-      if (atual !== este) return;
-      este.indices = r[0]; este.ajustados = r[1]; desenha();
-    }, function(e){ console.error(e); if (atual === este){ jAviso.textContent = "Erro no índice de custo: " + e.message; } });
+      if (!este.ativo()) return;
+      este.indices = r[0]; este.ajustados = r[1]; este.redesenha();
+    }, function(e){ console.error(e); if (este.ativo()){ este.ui.aviso.textContent = "Erro no índice de custo: " + e.message; } });
   }
 
   /* ---------------- abre o lote de uma BPC T1 ---------------- */
@@ -748,7 +682,7 @@
                 meBp: bpc.me, teBp: bpc.te, E: E, BPS: BPS,
                 chanceBase: I.prob.get(bpc.t) || 0, sk: separaSkills(I, bpc.t),
                 tempoInv: I.tempo.get(I.k(INV, bpc.t)), jobs: JOBS_PADRAO, sobra: 0 };
-    ligaPrecos(ctx);
+    ligaJanela(ctx, SEL, { ts: jTs, aviso: AVISO_T2 }, function(){ return atual === ctx; }, desenha);
     var ids = Array.from(arvore(I, ctx.item, ctx.bpT2).keys());
     (I.mat.get(I.k(INV, bpc.t)) || []).forEach(function(m){ ids.push(m.t); });
     ctx.ids = ids;
@@ -774,27 +708,17 @@
   /* ---------------- janela Invenção T2: as BPCs T1 do estoque do Tudão ---------------- */
   var grid = document.getElementById("t2-grid"), nota = document.getElementById("t2-nota");
   async function desenhaGrid(){
-    grid.innerHTML = ""; nota.textContent = "Carregando…";
-    var snap = CV.lsGet("calculeve.estoque.tudo", null);
-    if (!snap){ nota.textContent = "Sem estoque do Tudão salvo. Atualize o Tudão no Estoque."; return; }
-    var I = await idx(), E = somaEstoque(snap), BPS = bpsDoEstoque(snap);
-    var lista = bpcsInventaveis(snap, I).sort(function(a, b){
-      return ((I.T.get(a.t) || {}).name || "").localeCompare((I.T.get(b.t) || {}).name || "") || (b.me - a.me);
-    });
-    nota.textContent = "Estoque do Tudão de " + CV.dataHora(snap.ts) +
-                       ". Só BPC: invenção só roda em cópia.";
-    if (!lista.length){ grid.appendChild(el("div", "vazio", "Nenhuma BPC com invenção no estoque.")); return; }
-    lista.forEach(function(b){
-      var nome = (I.T.get(b.t) || {}).name || String(b.t), ic = el("button", "icon bp");
-      ic.title = nome + " (BPC)";
-      ic.appendChild(CV.iconeTipo(b.t, "bpc"));
-      ic.appendChild(el("span", "bp-nome", nome.replace(/ Blueprint$/, "")));
-      ic.appendChild(el("span", "bp-dados", "ME: " + b.me + " / TE: " + b.te + " / QT: " + b.qt +
-                                            (b.runs > 0 ? " / runs: " + b.runs : "")));
-      ic.addEventListener("click", function(){ abre(I, b, E, BPS); });
-      grid.appendChild(ic);
-    });
+    var I = await idx();
+    return CV.listaBps({ grid: grid, nota: nota, busca: document.getElementById("t2-busca"), vazio: "Nenhuma BPC com invenção no estoque.",
+                         extraNota: " Só BPC: invenção só roda em cópia.",
+                         aceita: function(tipo, copia){ return copia && I.produto.has(I.k(INV, tipo)); },
+                         aoAbrir: function(b, snap){ abre(I, b, CV.estoquePorTipo(snap), bpsDoEstoque(snap)); } });
   }
+
+  /* o que a janela Produzir reusa (produzir.js, carregado depois) */
+  window.T2 = { bpsDoEstoque: bpsDoEstoque, arvore: arvore, cenario: cenario, ligaJanela: ligaJanela,
+                carrega: recarrega, corpo: corpo, secCadeia: secCadeia, secCrus: secCrus,
+                secResultado: secResultado, gruposNerd: gruposNerd };
 
   document.getElementById("ic-t2").addEventListener("click", function(){
     WIN.open("w-t2");

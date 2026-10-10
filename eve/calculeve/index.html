@@ -32,6 +32,14 @@
       <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#microscopio"/></svg>
       <span>Invenção T2</span>
     </button>
+    <button type="button" class="icon" id="ic-prod" title="Produzir">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#engrenagem"/></svg>
+      <span>Produzir</span>
+    </button>
+    <button type="button" class="icon" id="ic-brave" title="Doutrinas da Brave" hidden>
+      <img src="../../assets/icons/Brave.png" alt="">
+      <span>Brave</span>
+    </button>
   </div>
   <div class="icon-linha">
     <button type="button" class="icon" id="ic-estr" title="Cadastrar Estruturas">
@@ -90,32 +98,16 @@
     <div class="tabs">
       <button type="button" class="tab on" data-tab="assets">Personal Assets</button>
       <button type="button" class="tab" data-tab="bps">Blueprints</button>
+      <input type="search" class="campo busca" id="as-busca" placeholder="Buscar pelo nome…">
     </div>
     <div id="as-body"></div>
   </div>
 </div>
 
-<div class="win" id="w-fuel">
+<div class="win janela-lista" id="w-fuel">
   <div class="title"><h3>Fuel Blocks</h3><button type="button" class="close" data-close="w-fuel">&times;</button></div>
   <div class="content">
-    <div class="fuel-escolhas">
-      <div class="seletor">
-        <button type="button" class="btn" id="fuel-char-btn"></button>
-        <div class="vidro" id="fuel-char-lista" hidden></div>
-      </div>
-      <div class="seletor">
-        <button type="button" class="btn" id="fuel-merc-btn"></button>
-        <div class="vidro" id="fuel-merc-lista" hidden></div>
-      </div>
-      <div class="seletor">
-        <button type="button" class="btn" id="fuel-fab-btn"></button>
-        <div class="vidro" id="fuel-fab-lista" hidden></div>
-      </div>
-      <div class="seletor">
-        <button type="button" class="btn" id="fuel-frete-btn"></button>
-        <div class="vidro" id="fuel-frete-lista" hidden></div>
-      </div>
-    </div>
+    <div class="escolhas" id="fuel-escolhas"></div>
     <div class="grid" id="fuel-grid"></div>
     <div class="grid divisao" id="fuel-iso"></div>
     <p class="nota" id="fuel-nota"></p></div>
@@ -125,8 +117,8 @@
   <div class="title"><h3 id="fmat-title">Materiais</h3><button type="button" class="close" data-close="w-fmat">&times;</button></div>
   <div class="content">
     <div class="fmat-topo">
-      <span id="fmat-bp"></span>
-      <span class="fmat-runs"><label>Runs <input type="number" id="fmat-runs" min="1" step="1" value="1"></label>
+      <span class="bp-info" id="fmat-bp"></span>
+      <span class="fmat-runs"><label>Runs <input type="number" class="campo campo-num" id="fmat-runs" min="1" step="1" value="1"></label>
         <button type="button" class="btn" id="fmat-max">Max estoque</button>
         <button type="button" class="btn" id="fmat-zerar">Zerar estoque</button></span>
     </div>
@@ -139,39 +131,22 @@
   </div>
 </div>
 
-<div class="win" id="w-t2">
+<div class="win janela-lista" id="w-t2">
   <div class="title"><h3>Invenção T2</h3><button type="button" class="close" data-close="w-t2">&times;</button></div>
   <div class="content">
-    <div class="fuel-escolhas">
-      <div class="seletor">
-        <button type="button" class="btn" id="t2-char-btn"></button>
-        <div class="vidro" id="t2-char-lista" hidden></div>
-      </div>
-      <div class="seletor">
-        <button type="button" class="btn" id="t2-merc-btn"></button>
-        <div class="vidro" id="t2-merc-lista" hidden></div>
-      </div>
-      <div class="seletor">
-        <button type="button" class="btn" id="t2-fab-btn"></button>
-        <div class="vidro" id="t2-fab-lista" hidden></div>
-      </div>
-      <div class="seletor">
-        <button type="button" class="btn" id="t2-frete-btn"></button>
-        <div class="vidro" id="t2-frete-lista" hidden></div>
-      </div>
-    </div>
-    <div class="grid" id="t2-grid"></div>
+    <div class="escolhas" id="t2-escolhas"><input type="search" class="campo busca" id="t2-busca" placeholder="Buscar pelo nome…"></div>
+    <div id="t2-grid"></div>
     <p class="nota" id="t2-nota"></p></div>
 </div>
 
-<div class="win largura-fixa" id="w-t2job">
+<div class="win largura-fixa janela-lote" id="w-t2job">
   <div class="title"><h3 id="t2j-title">Invenção</h3><button type="button" class="close" data-close="w-t2job">&times;</button></div>
   <div class="content">
     <div class="fmat-topo">
-      <span id="t2j-bp"></span>
+      <span class="bp-info" id="t2j-bp"></span>
       <span class="fmat-runs">
-        <label>Jobs <input type="number" id="t2j-jobs" min="1" step="1" value="1"></label>
-        <label>Runs sobrando <input type="number" id="t2j-sobra" min="0" step="1" value="0"></label>
+        <label>Jobs <input type="number" class="campo campo-num" id="t2j-jobs" min="1" step="1" value="1"></label>
+        <label>Runs sobrando <input type="number" class="campo campo-num" id="t2j-sobra" min="0" step="1" value="0"></label>
       </span>
     </div>
     <div class="fmat-precos"><span id="t2j-precos-ts"></span>
@@ -179,6 +154,38 @@
     <div class="fmat-precos"><button type="button" class="btn" id="t2j-nerd-btn">Números para Nerds</button></div>
     <div class="nota" id="t2j-aviso"></div>
     <div id="t2j-body"></div>
+  </div>
+</div>
+
+<div class="win janela-lista" id="w-prod">
+  <div class="title"><h3>Produzir</h3><button type="button" class="close" data-close="w-prod">&times;</button></div>
+  <div class="content">
+    <div class="escolhas" id="prod-escolhas"><input type="search" class="campo busca" id="prod-busca" placeholder="Buscar pelo nome…">
+      <button type="button" class="btn btn-brave" id="prod-brave" aria-pressed="false" title="Só o que está nas doutrinas da Brave importadas" hidden>
+        <img src="../../assets/icons/Brave.png" alt=""><span>Brave</span>
+      </button>
+    </div>
+    <div id="prod-grid"></div>
+    <p class="nota" id="prod-nota"></p></div>
+</div>
+
+<div class="win largura-fixa janela-lote" id="w-prodjob">
+  <div class="title"><h3 id="pj-title">Produzir</h3><button type="button" class="close" data-close="w-prodjob">&times;</button></div>
+  <div class="content">
+    <div class="fmat-topo">
+      <span class="bp-info" id="pj-bp"></span>
+      <span class="fmat-runs">
+        <label id="pj-me-l" hidden>ME <input type="number" class="campo campo-num" id="pj-me" min="0" max="10" step="1" value="0"></label>
+        <label id="pj-te-l" hidden>TE <input type="number" class="campo campo-num" id="pj-te" min="0" max="20" step="2" value="0"></label>
+        <label>Runs <input type="number" class="campo campo-num" id="pj-runs" min="1" step="1" value="1"></label>
+        <button type="button" class="btn" id="pj-max" hidden>Fazer máximo</button>
+      </span>
+    </div>
+    <div class="fmat-precos"><span id="pj-precos-ts"></span>
+      <button type="button" class="btn" id="pj-precos-btn">Atualizar preços</button></div>
+    <div class="fmat-precos"><button type="button" class="btn" id="pj-nerd-btn">Números para Nerds</button></div>
+    <div class="nota" id="pj-aviso"></div>
+    <div id="pj-body"></div>
   </div>
 </div>
 
@@ -274,6 +281,18 @@
   </div>
 </div>
 
+<div class="win" id="w-brave">
+  <div class="title"><h3>Doutrinas da Brave</h3><button type="button" class="close" data-close="w-brave">&times;</button></div>
+  <div class="content">
+    <p>Importe o CSV da tabela Ship Overview (botão Export CSV do site de doutrinas). Ele substitui o anterior.</p>
+    <input type="file" id="brave-arq" accept=".csv,text/csv" hidden>
+    <div class="acts">
+      <button type="button" class="btn" id="brave-ok">Escolher arquivo</button>
+    </div>
+    <div class="nota" id="brave-msg"></div>
+  </div>
+</div>
+
 <div class="win" id="w-fic">
   <div class="title"><h3 id="fic-title">Personagem</h3><button type="button" class="close" data-close="w-fic">&times;</button></div>
   <div class="content">
@@ -285,6 +304,16 @@
     <p id="fic-desc"></p>
     <div class="nota">Fonte: <a id="fic-fonte" target="_blank" rel="noopener"></a></div>
   </div>
+</div>
+
+<div class="win" id="w-log">
+  <div class="title"><h3 class="titulo-ic"><svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#log"/></svg><span>Log</span></h3><button type="button" class="close" data-close="w-log">&times;</button></div>
+  <div class="content"><div class="grid" id="log-lista"></div></div>
+</div>
+
+<div class="win" id="w-logtxt">
+  <div class="title"><h3 class="titulo-ic"><svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#log"/></svg><span id="log-title">Log</span></h3><button type="button" class="close" data-close="w-logtxt">&times;</button></div>
+  <div class="content"><div id="log-body"></div></div>
 </div>
 
 <div class="win" id="w-wipe">
@@ -320,6 +349,8 @@
 <script src="nerds.js"></script>
 <script src="fuel.js"></script>
 <script src="t2.js"></script>
+<script src="brave.js"></script>
+<script src="produzir.js"></script>
 <script src="estruturas.js"></script>
 <script src="frete.js"></script>
 </body>

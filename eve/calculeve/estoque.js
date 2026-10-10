@@ -5,8 +5,7 @@
                     7: "Reverse Eng.", 8: "Invenção", 9: "Reação", 11: "Reação" };
   var OCULTOS = { Implant: 1, Skill: 1 };      // flags que o menu do jogo não lista
 
-  var fmtInt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-  var fmt2   = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var fmtInt = CV.fmt.int, fmt2 = CV.fmt.n2;
 
   /* ---------------- utilidades (comuns em calculeve.js) ---------------- */
   var el = CV.el;
@@ -17,13 +16,12 @@
   var tipos = CV.tipos;
 
   /* ---------------- dados estáticos da ESI, com cache no navegador ---------------- */
-  function grupos(ids){ return cacheado("calculeve.cache.grupos", ids, async function(id){ return (await esi("/universe/groups/" + id + "/")).json.name; }); }
   function estacoes(ids){ return cacheado("calculeve.cache.estacoes", ids, async function(id){ var j = (await esi("/universe/stations/" + id + "/")).json; return { name: j.name, sys: j.system_id }; }); }
 
   var precosP = null;
   function precos(){
-    if (!precosP) precosP = esi("/markets/prices/").then(function(r){
-      var m = new Map(); r.json.forEach(function(p){ m.set(p.type_id, p.average_price || 0); }); return m;
+    if (!precosP) precosP = Mercado.precosEsi().then(function(l){
+      var m = new Map(); l.forEach(function(p){ m.set(p.type_id, p.average_price || 0); }); return m;
     }).catch(function(){ precosP = null; return new Map(); });
     return precosP;
   }
@@ -127,7 +125,8 @@
 
     // grupos
     var gids = new Set(); assets.forEach(function(a){ var t = T.get(a.type_id); if (t) gids.add(t.group); });
-    var G = await grupos(Array.from(gids));
+    var GI = await CV.grupos(Array.from(gids)), G = {};
+    gids.forEach(function(id){ G[id] = (GI[id] || {}).n; });
 
     return { T: T, P: P, G: G, raizes: raizes, info: info, dados: dados };
   }
@@ -161,10 +160,10 @@
   function secTxt(s){ return (s == null) ? "" : (Math.round(s * 10) / 10).toFixed(1); }
   function secClasse(s){ return s == null ? "" : s >= 0.45 ? " hi" : s > 0 ? " lo" : " null"; }
 
-  function linhaItem(M, a, nivel, tb, multi){
+  function linhaItem(M, a, nivel, tb, multi, F){
     var t = M.T.get(a.type_id) || { name: "Tipo " + a.type_id, group: 0, vol: 0 };
     var tr = el("tr", "it" + (a.filhos.length ? " pai" : ""));
-    var td = el("td"); td.style.paddingLeft = (8 + nivel * 18) + "px";
+    var td = el("td", "arv"); td.style.setProperty("--nivel", nivel); td.style.setProperty("--passo", "18px");
     var tw = el("span", "tw", a.filhos.length ? "▸" : ""); td.appendChild(tw);
     td.appendChild(CV.iconeTipo(a.type_id, /Blueprint|Formula/.test(t.name) ? (a.is_blueprint_copy ? "bpc" : "bp") : "icon"));
     td.appendChild(document.createTextNode(a.nome || t.name));
@@ -177,9 +176,13 @@
     if (multi) tr.appendChild(el("td", null, a.dono));
     tb.appendChild(tr);
 
-    if (a.filhos.length) expansivel(tr, td, tw, function(tb){
-      ordena(M, a.filhos).forEach(function(f){ linhaItem(M, f, nivel + 1, tb, multi); });
-    });
+    if (a.filhos.length){
+      var filhos = F ? F.filhos(a) : a.filhos;
+      expansivel(tr, td, tw, function(tb){
+        ordena(M, filhos).forEach(function(f){ linhaItem(M, f, nivel + 1, tb, multi, F); });
+      });
+      if (F && filhos !== a.filhos) tr._abre();      // busca: abre o caminho até o que casou
+    }
   }
 
   /* linha que abre/fecha (▸/▾) as linhas geradas por `gera(tbody)` logo abaixo dela;
@@ -196,6 +199,7 @@
       tr.after(frag);
     });
     tr._fecha = function(){ if (aberto){ aberto = false; tw.textContent = "▸"; fecha(); } };
+    tr._abre = function(){ if (!aberto) alvo.click(); };
   }
   function ordena(M, lista){
     return lista.slice().sort(function(a, b){
@@ -222,8 +226,16 @@
     return out;
   }
 
-  function renderAssets(M, alvo){
-    var multi = M.dados.length > 1;
+  /* busca no Personal Assets: item casa pelo nome (ou pelo tipo, se tiver nome próprio); fica o que casa e o
+     caminho até o que casa dentro de nave/container. Item que casa mostra tudo o que tem dentro. */
+  function filtroAssets(M, termo){
+    function casa(a){ return CV.contem((a.nome || "") + " " + ((M.T.get(a.type_id) || {}).name || ""), termo); }
+    function contem(a){ return casa(a) || a.filhos.some(contem); }
+    return { contem: contem, filhos: function(a){ return casa(a) ? a.filhos : a.filhos.filter(contem); } };
+  }
+
+  function renderAssets(M, alvo, termo){
+    var multi = M.dados.length > 1, F = termo ? filtroAssets(M, termo) : null;
     var tab = el("table", "as"), th = el("thead"), hr = el("tr");
     [["Nome"], ["Qtd", "n"], ["Grupo"], ["Volume", "n"], ["Preço est.", "n"]].concat(multi ? [["Char"]] : [])
       .forEach(function(c){ hr.appendChild(el("th", c[1] || null, c[0])); });
@@ -235,13 +247,16 @@
       var tr = el("tr", "loc"), td = el("td"); td.colSpan = cols;
       var tw = el("span", "tw", "▸"); td.appendChild(tw);
       td.appendChild(el("span", "sec" + secClasse(inf.sec), secTxt(inf.sec)));
+      if (F) itens = itens.filter(F.contem);
+      if (!itens.length) return;
       var txt = nome + " - " + itens.length + (itens.length === 1 ? " Item" : " Items");
       if (inf.jumps != null) txt += " - Route: " + inf.jumps + (inf.jumps === 1 ? " Jump" : " Jumps");
       td.appendChild(document.createTextNode(txt));
       tr.appendChild(td); tb.appendChild(tr);
       expansivel(tr, tr, tw, function(tb){
-        ordena(M, itens).forEach(function(a){ linhaItem(M, a, 1, tb, multi); });
+        ordena(M, itens).forEach(function(a){ linhaItem(M, a, 1, tb, multi, F); });
       });
+      if (F) tr._abre();
     }
 
     /* estrutura cujo nome a ESI não devolveu (sem acesso de docagem) vai para um local só */
@@ -256,11 +271,12 @@
 
     var ocultos = [].concat.apply([], todos.filter(semAcesso).map(function(id){ return M.raizes.get(id); }));
     if (ocultos.length) linhaLocal("Estruturas sem acesso de docagem", {}, somaTipos(ocultos));
+    if (F && !tb.children.length){ alvo.appendChild(el("div", "status", "Nada com esse nome.")); return; }
     alvo.appendChild(tab);
   }
 
   /* ---------------- render: blueprints (mesmo agrupamento da planilha) ---------------- */
-  function renderBps(M, alvo){
+  function renderBps(M, alvo, termo){
     var multi = M.dados.length > 1, linhas = [];
     M.dados.forEach(function(d){
       var g = new Map();
@@ -287,9 +303,11 @@
              a.tipo.localeCompare(b.tipo) || a.sit.localeCompare(b.sit);
     });
 
+    var total = linhas.length;
+    linhas = linhas.filter(function(l){ return CV.contem(nome(l.t), termo); });
     var avisos = M.dados.filter(function(d){ return d.avisoBp; }).map(function(d){ return d.char.name + ": " + d.avisoBp; });
     if (avisos.length) alvo.appendChild(el("div", "status", "Blueprints puladas — " + avisos.join(" · ")));
-    if (!linhas.length){ alvo.appendChild(el("div", "status", "Nenhuma blueprint.")); return; }
+    if (!linhas.length){ alvo.appendChild(el("div", "status", total ? "Nada com esse nome." : "Nenhuma blueprint.")); return; }
 
     var tab = el("table", "as"), hr = el("tr");
     [["Blueprint"], ["Qtd", "n"], ["Tipo"], ["ME", "n"], ["TE", "n"], ["Runs", "n"], ["Situação"]].concat(multi ? [["Char"]] : [])
@@ -316,17 +334,18 @@
       wAs = document.getElementById("w-assets"), body = document.getElementById("as-body"),
       titulo = document.getElementById("as-title");
   var atual = null, M = null, aba = "assets", geracao = 0;
+  var termo = CV.busca(document.getElementById("as-busca"), function(){ desenhaAba(); });
 
   var quando = document.getElementById("as-quando");
   function marcaHora(ts){
     quando.textContent = ts ? "atualizado em " + CV.dataHora(ts) : "";
   }
-  function status(msg){ body.innerHTML = ""; body.appendChild(el("div", "status", msg)); }
+  function status(msg){ CV.status(body, msg); }
   function desenhaAba(){
     document.querySelectorAll("#w-assets .tab").forEach(function(b){ b.classList.toggle("on", b.dataset.tab === aba); });
     if (!M) return;
     body.innerHTML = "";
-    (aba === "assets" ? renderAssets : renderBps)(M, body);
+    (aba === "assets" ? renderAssets : renderBps)(M, body, termo());
   }
 
   async function abreCache(){
@@ -374,6 +393,7 @@
 
   function abreAssets(id, nome){
     atual = id; titulo.textContent = "Estoque — " + nome;
+    document.getElementById("as-busca").value = "";
     WIN.open("w-assets"); abreCache();
   }
 
