@@ -92,12 +92,12 @@ var CV = (function(){
     });
     return sdeP[k];
   }
-  /* typeID -> { name, group, vol, pub } (pub = publicado no jogo) */
+  /* typeID -> { name, group, vol, pub, lote } (pub = publicado no jogo; lote = portionSize, unidades por lote de reprocesso) */
   var tiposP = null;
   function tipos(){
-    if (!tiposP) tiposP = sde("invTypes.csv", ["typeID", "groupID", "typeName", "volume", "published"]).then(function(rows){
+    if (!tiposP) tiposP = sde("invTypes.csv", ["typeID", "groupID", "typeName", "volume", "published", "portionSize"]).then(function(rows){
       var m = new Map();
-      rows.forEach(function(r){ m.set(Number(r[0]), { name: r[2], group: Number(r[1]), vol: Number(r[3]) || 0, pub: r[4] === "1" }); });
+      rows.forEach(function(r){ m.set(Number(r[0]), { name: r[2], group: Number(r[1]), vol: Number(r[3]) || 0, pub: r[4] === "1", lote: Number(r[5]) || 1 }); });
       return m;
     });
     return tiposP;
@@ -193,7 +193,7 @@ var CV = (function(){
   ];
   function imgFicticio(c){ var i = el("img"); i.alt = ""; i.src = "../../assets/icons/" + c.img; return i; }
 
-  /* ---------- seletores de personagem, mercado, fábrica e freighter service ----------
+  /* ---------- seletores de personagem, mercado, fábrica, reação e freighter service ----------
      Componente comum: qualquer janela que fabrique, compre ou venda escolhe por aqui. A janela põe no
      HTML um contêiner `<prefixo>-escolhas` e chama seletores(prefixo, chaves), que monta os botões nele, com `chaves` = { id: chave do localStorage } só dos que ela usa.
      O × ao lado de cada botão tira a escolha; a conta de quem chamou segue sem ela. */
@@ -206,6 +206,12 @@ var CV = (function(){
              opcoes: function(){ return estruturas("mercado"); }, imagem: function(e){ return iconeTipo(e.type, "icon"); } },
     fab:   { vazio: "Escolher fábrica", semOpcao: "Nenhuma fábrica — cadastre em Cadastrar Estruturas.",
              opcoes: function(){ return estruturas("industria"); }, imagem: function(e){ return iconeTipo(e.type, "icon"); } },
+    /* estrutura onde rodam as reações (normalmente outra, uma refinaria): os bônus de reação e o sistema do custo do job saem dela */
+    reac:  { vazio: "Escolher reação", semOpcao: "Nenhuma estrutura de indústria — cadastre em Cadastrar Estruturas.",
+             opcoes: function(){ return estruturas("industria"); }, imagem: function(e){ return iconeTipo(e.type, "icon"); } },
+    /* estrutura de indústria onde se reprocessa (Loot Appraiser): a taxa de refino cadastrada sai dela */
+    refino: { vazio: "Escolher refino", semOpcao: "Nenhuma estrutura de indústria — cadastre em Cadastrar Estruturas.",
+              opcoes: function(){ return estruturas("industria"); }, imagem: function(e){ return iconeTipo(e.type, "icon"); } },
     frete: { vazio: "Escolher freighter service", semOpcao: "Nenhum freighter service — cadastre em Cadastrar Freighter Service.",
              opcoes: function(){ return lsGet("calculeve.fretes", []).map(function(f){ return { id: f.id, name: f.nome, f: f }; }); },
              imagem: function(){ return el("span", "mascara mascara-freighter"); } }
@@ -263,8 +269,9 @@ var CV = (function(){
 
   var ATIV = { FAB: "1", INV: "8", REAC: "11" };   // activityID nos industryActivity*.csv
   /* ---------- índices do SDE (indústria) ----------
-     produto  "act|bp"     -> { t: produto, q: unidades por run }
+     produto  "act|bp"     -> { t: produto, q: unidades por run }  (com mais de um produto, fica o último do dump)
      porProd  produto      -> [{ bp, act, q }]  (fabricação e reação)
+     inv      bp           -> [{ t: BPC T2, q: runs por BPC }], todos os produtos da invenção, na ordem do dump
      mat      "act|bp"     -> [{ t: material, q: qtd base (ME 0) por run }]
      tempo    "act|bp"     -> segundos por run
      prob     bp           -> chance base de invenção
@@ -280,12 +287,16 @@ var CV = (function(){
       sde("industryActivityProbabilities.csv", ["typeID", "activityID", "productTypeID", "probability"]),
       sde("industryActivitySkills.csv", ["typeID", "activityID", "skillID", "level"])
     ]).then(function(r){
-      var I = { T: r[0], produto: new Map(), porProd: new Map(), mat: new Map(),
+      var I = { T: r[0], produto: new Map(), porProd: new Map(), inv: new Map(), mat: new Map(),
                 tempo: new Map(), prob: new Map(), skills: new Map() };
       I.k = function(act, bp){ return act + "|" + bp; };
       r[1].forEach(function(x){
         var bp = Number(x[0]), p = { t: Number(x[2]), q: Number(x[3]) };
         I.produto.set(I.k(x[1], bp), p);
+        if (x[1] === ATIV.INV){
+          if (!I.inv.has(bp)) I.inv.set(bp, []);
+          I.inv.get(bp).push(p);
+        }
         if (x[1] === ATIV.FAB || x[1] === ATIV.REAC){
           if (!I.porProd.has(p.t)) I.porProd.set(p.t, []);
           I.porProd.get(p.t).push({ bp: bp, act: x[1], q: p.q });
@@ -324,6 +335,17 @@ var CV = (function(){
 
   /* mensagem de uma linha no lugar do conteúdo de uma janela */
   function status(corpo, msg){ corpo.innerHTML = ""; corpo.appendChild(el("div", "status", msg)); }
+  /* texto que vira botão e copia para a área de transferência `valor` (ou o próprio texto); pisca .copiado ao copiar.
+     `classe` troca o visual (padrão: sublinhado tracejado, .copia; "btn …" vira botão comum) */
+  function copiavel(texto, valor, classe){
+    var b = el("button", classe || "copia", texto); b.type = "button"; b.title = "Copiar";
+    b.addEventListener("click", function(){
+      navigator.clipboard.writeText(valor != null ? valor : texto).then(function(){
+        b.classList.add("copiado"); setTimeout(function(){ b.classList.remove("copiado"); }, 700);
+      }, function(e){ console.error(e); });
+    });
+    return b;
+  }
 
   /* níveis de skill do char escolhido: sem char, tudo 0; fictício, tudo no nível dele; senão, os da ESI */
   function niveis(c){
@@ -375,6 +397,34 @@ var CV = (function(){
     });
     return r;
   }
+  /* ---------- produto de job de fabricação e reação ainda não entregue ----------
+     `qtdProduzida(I, job)`: runs × unidades por run do SDE, 0 se o job não conta (outra atividade, já
+     entregue/cancelado, ou blueprint sem esse produto no SDE). O Estoque grava o resultado em `job.qtdProd`.
+     `emJobPorTipo(snap)`: tipo -> { qt, fim }, somando os chars; fim = término do último job do tipo. */
+  var JOB_ABERTO = { active: 1, paused: 1, ready: 1 };
+  /* job ainda não entregue (active, paused, ready; sem status também conta) */
+  function jobAberto(j){ return j.status == null || !!JOB_ABERTO[j.status]; }
+  var ACT_JOB = { 1: ATIV.FAB, 9: ATIV.REAC, 11: ATIV.REAC };     // activity_id da ESI -> activityID do SDE
+  function qtdProduzida(I, j){
+    if (!jobAberto(j)) return 0;
+    var act = ACT_JOB[j.activity_id];
+    var p = act && I.produto.get(I.k(act, j.blueprint_type_id));
+    if (!p || j.product_type_id !== p.t) return 0;
+    return (j.runs || 0) * p.q;
+  }
+  function emJobPorTipo(snap){
+    var r = new Map();
+    snap.dados.forEach(function(d){
+      (d.jobs || []).forEach(function(j){
+        if (!j.qtdProd) return;
+        var x = r.get(j.product_type_id);
+        if (!x){ x = { qt: 0, fim: null }; r.set(j.product_type_id, x); }
+        x.qt += j.qtdProd;
+        if (!x.fim || new Date(j.end_date) > new Date(x.fim)) x.fim = j.end_date;
+      });
+    });
+    return r;
+  }
   /* blueprints do estoque que `aceita(typeID)`, uma linha por (tipo, ME, TE, runs, cópia ou original), com a
      quantidade (`aceita(typeID, copia)` filtra), ordenadas por nome, original antes de cópia, maior ME e TE. `T` = CV.tipos(). */
   function blueprints(snap, T, aceita){
@@ -418,8 +468,10 @@ var CV = (function(){
   function tudao(){ return lsGet("calculeve.estoque.tudo", null); }
   /* janela de lista de blueprints do estoque do Tudão: aviso, cartões e `aoAbrir(b, snap)` no clique.
      `o` = { grid, nota, aceita(typeID, copia), vazio, extraNota, tituloFaltam, faltam(lista, T) -> [{ t: blueprint, nome, dados }],
-             simula } — com `simula: true`, a busca também mostra, numa seção própria, as blueprints publicadas do SDE que
-     `aceita(typeID, false)` e o estoque não tem; o clique chama `aoAbrir({ t, copia: false, me: 0, te: 0, runs: 0, qt: 0, sim: true }, snap)` */
+             simula, simCopia } — com `simula: true`, a busca também mostra, numa seção própria, as blueprints publicadas do
+     SDE que `aceita(typeID, simCopia)` e o estoque não tem; o clique chama
+     `aoAbrir({ t, copia: simCopia, me: 0, te: 0, runs: 0, qt: 0, sim: true }, snap)`. Sem `simCopia` é BPO simulada
+     (Produzir); com, BPC simulada (Invenção T2) */
   var SIM_MAX = 60;                                     // cartões simulados desenhados por busca; o resto pede refinar o termo
   async function listaBps(o){
     o.grid.innerHTML = ""; o.nota.textContent = "Carregando…";
@@ -461,15 +513,15 @@ var CV = (function(){
       sf.appendChild(gf); o.grid.appendChild(sf); secs.push(sf);
     }
     /* blueprints que o estoque não tem: só aparecem com termo na busca, como BPO 0/0 simulada */
-    var cand = [], sSim = null, gSim = null, nSim = null;
+    var cand = [], sSim = null, gSim = null, nSim = null, simCopia = !!o.simCopia, simTipo = simCopia ? "BPC" : "BPO";
     if (o.simula){
       var tem = new Set(lista.map(function(b){ return b.t; }));
       T.forEach(function(x, t){
-        if (x.pub && !tem.has(t) && /Blueprint$/.test(x.name) && o.aceita(t, false)) cand.push({ t: t, nome: x.name, curto: x.name.replace(/ Blueprint$/, "") });
+        if (x.pub && !tem.has(t) && /Blueprint$/.test(x.name) && o.aceita(t, simCopia)) cand.push({ t: t, nome: x.name, curto: x.name.replace(/ Blueprint$/, "") });
       });
       cand.sort(function(a, b){ return a.nome.localeCompare(b.nome); });
       sSim = el("div"); gSim = el("div", "grid"); nSim = el("div", "nota");
-      sSim.appendChild(el("h4", null, "Blueprints que você não tem — BPO simulada"));
+      sSim.appendChild(el("h4", null, "Blueprints que você não tem — " + simTipo + " simulada"));
       sSim.appendChild(gSim); sSim.appendChild(nSim); sSim.hidden = true;
       o.grid.appendChild(sSim);
     }
@@ -479,8 +531,9 @@ var CV = (function(){
       var achou = termo ? cand.filter(function(c){ return contem(c.curto, termo); }) : [];
       sSim.hidden = !achou.length;
       achou.slice(0, SIM_MAX).forEach(function(c){
-        var ic = cartao(c.t, "bp", c.curto, "não está no estoque — ME/TE ajustáveis", c.nome + " (BPO simulada)");
-        ic.addEventListener("click", function(){ o.aoAbrir({ t: c.t, copia: false, me: 0, te: 0, runs: 0, qt: 0, sim: true }, snap); });
+        var ic = cartao(c.t, simCopia ? "bpc" : "bp", c.curto, "não está no estoque" + (simCopia ? "" : " — ME/TE ajustáveis"),
+                        c.nome + " (" + simTipo + " simulada)");
+        ic.addEventListener("click", function(){ o.aoAbrir({ t: c.t, copia: simCopia, me: 0, te: 0, runs: 0, qt: 0, sim: true }, snap); });
         gSim.appendChild(ic);
       });
       if (achou.length > SIM_MAX) nSim.textContent = "Mais " + fmt.int.format(achou.length - SIM_MAX) + " — refine a busca.";
@@ -529,7 +582,8 @@ var CV = (function(){
            sde: sde, tipos: tipos,
            esi: esi, esiPaginado: esiPaginado, limite: limite, cacheado: cacheado, sistemas: sistemas, brave: brave, limpaOrfaos: limpaOrfaos, csv: csv,
            skills: skills, niveis: niveis, seletores: seletores,
-           ATIV: ATIV, industria: industria, fmt: fmt, hms: hms, status: status, bonusSkill: bonusSkill, estoquePorTipo: estoquePorTipo,
+           ATIV: ATIV, industria: industria, fmt: fmt, hms: hms, status: status, copiavel: copiavel, bonusSkill: bonusSkill, estoquePorTipo: estoquePorTipo,
+           qtdProduzida: qtdProduzida, emJobPorTipo: emJobPorTipo, jobAberto: jobAberto,
            blueprints: blueprints, cartao: cartao, cartaoBp: cartaoBp, tudao: tudao, listaBps: listaBps, igualaCartoes: igualaCartoes, grupos: grupos, contem: contem, busca: busca };
 })();
 

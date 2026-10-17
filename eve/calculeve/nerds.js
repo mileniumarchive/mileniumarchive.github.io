@@ -42,31 +42,53 @@ var Nerds = (function(){
     "ReceitaBuyJita": { t: "ReceitaBuyJita = quantidade produzida × (maior buy order de Jita 4-4 × " +
       "(1 − sales tax) − frete por unidade)\n\nMandar para Jita e vender direto na maior buy order.",
       ver: ["sales tax"] },
-    "Total a comprar": { t: "Total a comprar = soma, de cada material com Saldo negativo, de (quantidade que falta × " +
-      "menor sell order do mercado)\n\nComprar direto da sell order não paga taxa. Material que o estoque cobre entra com custo 0." },
-    "VendaInsumosBuyMerc": { t: "VendaInsumosBuyMerc = soma, de cada material, de (Necessário × maior buy order do mercado × " +
-      "(1 − sales tax))\n\nVender direto na buy order todos os materiais que o job consome, em vez de fabricar.", ver: ["sales tax"] },
-    "VendaInsumosSellMerc": { t: "VendaInsumosSellMerc = soma, de cada material, de (Necessário × menor sell order do mercado × " +
-      "(1 − broker − sales tax))\n\nVender todos os materiais que o job consome pondo sell orders no preço da menor sell, em vez de fabricar.",
-      ver: ["broker", "sales tax"] },
-    DeltaSellMerc: { t: "DeltaSellMerc = ReceitaSellMerc − Total a comprar\n\n" +
-      "Positivo: vendendo o item em sell order, sobra dinheiro depois de comprar o que falta dos materiais.",
-      ver: ["ReceitaSellMerc", "Total a comprar"] },
-    DeltaBuyMerc: { t: "DeltaBuyMerc = ReceitaBuyMerc − Total a comprar\n\n" +
-      "Positivo: vendendo o item direto na buy order, sobra dinheiro depois de comprar o que falta dos materiais.",
-      ver: ["ReceitaBuyMerc", "Total a comprar"] },
-    DeltaSellInsumos: { t: "DeltaSellInsumos = ReceitaSellMerc − VendaInsumosBuyMerc\n\n" +
-      "Positivo: fabricar e vender o item em sell order rende mais que vender os materiais.",
-      ver: ["ReceitaSellMerc", "VendaInsumosBuyMerc"] },
-    DeltaBuyInsumos: { t: "DeltaBuyInsumos = ReceitaBuyMerc − VendaInsumosBuyMerc\n\n" +
-      "Positivo: fabricar e vender o item direto na buy order rende mais que vender os materiais.",
-      ver: ["ReceitaBuyMerc", "VendaInsumosBuyMerc"] },
-    DeltaSellInsumosSell: { t: "DeltaSellInsumosSell = ReceitaSellMerc − VendaInsumosSellMerc\n\n" +
-      "Positivo: fabricar e vender o item em sell order rende mais que vender os materiais em sell order.",
-      ver: ["ReceitaSellMerc", "VendaInsumosSellMerc"] },
-    DeltaBuyInsumosSell: { t: "DeltaBuyInsumosSell = ReceitaBuyMerc − VendaInsumosSellMerc\n\n" +
-      "Positivo: fabricar e vender o item direto na buy order rende mais que vender os materiais em sell order.",
-      ver: ["ReceitaBuyMerc", "VendaInsumosSellMerc"] }
+
+    /* lista de compra (Invenção T2, Produzir e Fuel Blocks) */
+    "Que diabo são esses check box?": { t: "Clipboard E e Clipboard J copiam a lista de compra, um item por linha " +
+      "(nome, tab, quantidade): o Comprar (un) da Cadeia e dos Insumos crus e, na invenção, os datacores e o decryptor do " +
+      "lote. O E leva só o que a melhor rota manda comprar na estrutura; o J, só o que manda comprar em Jita.\n\n" +
+      "Comprar tudo — conta como se o estoque (e o que está em job) estivesse vazio: compra tudo o que o ciclo consome. " +
+      "A rota de cada item e a decisão de produzir ou comprar continuam as mesmas, e os dois clipboards continuam " +
+      "separados. Desmarcar desmarca o COMPRAR TUDO DE VERDADE.\n\n" +
+      "COMPRAR TUDO DE VERDADE — só aparece com Comprar tudo marcado. Junta os dois clipboards num botão só, Clipboard " +
+      "(tudo), com a lista completa, estrutura e Jita juntas.\n\n" +
+      "Não gosto de reação — independe dos outros. Nada da cadeia é produzido: todos os materiais da blueprint do item " +
+      "final são comprados prontos, cada um na mais barata entre estrutura e Jita, e só se faz o job do item final. " +
+      "Material sem ordem de venda em nenhuma das duas continua sendo produzido. Sozinho, desconta o estoque; com Comprar " +
+      "tudo, não; com os três, é a lista de todos os materiais da blueprint do item final, num clipboard só.\n\n" +
+      "A Cadeia, os Insumos crus e o Resultado refletem o que estiver marcado." },
+
+    /* Loot Appraiser */
+    "frete por unidade": { t: "frete por unidade = MAX(ISK por m³ × volume da unidade ; % do colateral × preço da unidade)\n\n" +
+      "Do freighter service escolhido. No Loot Appraiser o colateral é o maior buy de Jita do item. O frete mínimo por " +
+      "contrato não entra." },
+    "Scrapmetal Processing": { t: "Nível da skill Scrapmetal Processing do personagem escolhido (ESI). Sem personagem, 0.\n\n" +
+      "Cada nível soma o bônus da skill ao rendimento de reprocesso de itens (o refiningYieldMutator dela, no dogma do SDE)." },
+    "Rendimento de refino (estrutura)": { t: "Rendimento de refino (estrutura) = base da estrutura × (1 + bônus por nível × " +
+      "nível de Scrapmetal Processing)\n\nA base é o refiningYieldMultiplier do Standup Reprocessing Facility I, do dogma " +
+      "do SDE. É a fração da receita de reprocesso que volta.", ver: ["Scrapmetal Processing"] },
+    "Rendimento de refino (Jita)": { t: "Rendimento de refino (Jita) = base de Jita 4-4 × (1 + bônus por nível × nível de " +
+      "Scrapmetal Processing)\n\nA base é o reprocessing_efficiency da estação, da ESI (/universe/stations/).",
+      ver: ["Scrapmetal Processing"] },
+    "Taxa de refino (estrutura)": { t: "Campo Taxa de refino (%) da estrutura de refino escolhida, em Cadastrar Estruturas " +
+      "(a ESI não informa). Sai do que o reprocesso devolve." },
+    "Taxa de refino (Jita)": { t: "reprocessing_stations_take de Jita 4-4, da ESI (/universe/stations/). É a taxa base da " +
+      "estação, sem o desconto de standing. Sai do que o reprocesso devolve." },
+    "Lote — Estrutura": { t: "Lote — Estrutura = soma, de cada item, de (quantidade × maior buy order do mercado escolhido × " +
+      "(1 − sales tax))\n\nVender o lote inteiro direto no buy da estrutura.", ver: ["sales tax"] },
+    "Lote — Jita": { t: "Lote — Jita = soma, de cada item, de (quantidade × (maior buy order de Jita 4-4 × (1 − sales tax) − " +
+      "frete por unidade))\n\nMandar o lote inteiro para Jita e vender direto no buy.", ver: ["sales tax", "frete por unidade"] },
+    "Lote — Refino na estrutura": { t: "Lote — Refino na estrutura = soma, de cada item que refina, de (minerais de ⌊quantidade ÷ " +
+      "lote⌋ lotes × rendimento × (1 − taxa) × maior buy do mercado × (1 − sales tax)) + a sobra abaixo de um lote no buy do " +
+      "mercado\n\nItem que não refina entra inteiro, vendido no buy do mercado (o mesmo que Lote — Estrutura). Misturar " +
+      "itens que refinam com itens que não refinam pode deixar o appraisal de refino impreciso.",
+      ver: ["Rendimento de refino (estrutura)", "Taxa de refino (estrutura)", "sales tax", "Lote — Estrutura"] },
+    "Lote — Refino em Jita": { t: "Lote — Refino em Jita = soma, de cada item que refina, de (minerais de ⌊quantidade ÷ lote⌋ " +
+      "lotes × rendimento × (1 − taxa) × maior buy de Jita × (1 − sales tax) − quantidade × frete por unidade) + a sobra abaixo " +
+      "de um lote no buy de Jita\n\nO frete é do item inteiro, antes de reprocessar. Item que não refina entra inteiro, " +
+      "vendido no buy de Jita (o mesmo que Lote — Jita). Misturar itens que refinam com itens que não refinam pode deixar o " +
+      "appraisal de refino impreciso.",
+      ver: ["Rendimento de refino (Jita)", "Taxa de refino (Jita)", "sales tax", "frete por unidade", "Lote — Jita"] }
   };
 
   /* rótulo de uma métrica: botão que abre a explicação se ela existe, senão texto */

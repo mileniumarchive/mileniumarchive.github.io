@@ -134,14 +134,27 @@ var Mercado = (function(){
     return Math.max((Number(servico.iskM3) || 0) * vol, (Number(servico.pctColat) || 0) / 100 * preco);
   }
 
+  /* buyback (calculeve.buybacks) para um tipo: % do Jita buy menos a taxa adicional da exceção do item ou, se o
+     item não tem, a do grupo dele. { pct, un }; un = null sem Jita buy. */
+  function buyback(bb, tipo, grupo, jitaBuy){
+    var exc = bb.exc || [], x = exc.filter(function(e){ return e.tipo === "i" && e.id === tipo; })[0] ||
+                                exc.filter(function(e){ return e.tipo === "g" && e.id === grupo; })[0];
+    var pct = (Number(bb.pct) || 0) - (x ? Number(x.taxa) || 0 : 0);
+    return { pct: pct, un: jitaBuy == null ? null : jitaBuy * pct / 100 };
+  }
+
   /* taxas em fração: sales = 7,5% × (1 − 11% × Accounting) · broker = 0,5% SCC + % do dono.
      `niveis` = Map skill_id -> nível (CV.skills). null se a estrutura não tem o broker do dono cadastrado. */
   async function taxas(estr, niveis){
     if (!estr.taxas || estr.taxas.brokerDono == null) return null;
+    var s = await salesTax(niveis);
+    return { sales: s.sales, broker: (BROKER_SCC + Number(estr.taxas.brokerDono)) / 100, accounting: s.accounting };
+  }
+  /* só a sales tax, em fração (venda direto em buy order não paga broker): { sales, accounting } */
+  async function salesTax(niveis){
     var T = await CV.tipos(), acc = 0;
     T.forEach(function(t, id){ if (t.name === "Accounting") acc = niveis.get(id) || 0; });
-    return { sales: SALES_TAX_BASE / 100 * (1 - ACCOUNTING_POR_NIVEL / 100 * acc),
-             broker: (BROKER_SCC + Number(estr.taxas.brokerDono)) / 100, accounting: acc };
+    return { sales: SALES_TAX_BASE / 100 * (1 - ACCOUNTING_POR_NIVEL / 100 * acc), accounting: acc };
   }
 
   /* por unidade; null = sem ordem daquele lado */
@@ -158,5 +171,5 @@ var Mercado = (function(){
              buy:  par[1] == null ? null : par[1] * (1 + tx.broker) };
   }
 
-  return { isk: isk, iskOuNaoTem: iskOuNaoTem, precosEsi: precosEsi, jita: jita, regiaoDoSistema: regiaoDoSistema, historico: historico, volumes: volumes, frete: frete, salvos: salvos, atualiza: atualiza, precos: precos, taxas: taxas, venda: venda, compra: compra };
+  return { isk: isk, iskOuNaoTem: iskOuNaoTem, precosEsi: precosEsi, jita: jita, regiaoDoSistema: regiaoDoSistema, historico: historico, volumes: volumes, frete: frete, buyback: buyback, salvos: salvos, atualiza: atualiza, precos: precos, taxas: taxas, salesTax: salesTax, venda: venda, compra: compra };
 })();

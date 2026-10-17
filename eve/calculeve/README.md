@@ -9,24 +9,26 @@ Plano de port e decisões pendentes: [README-FUTURO.md](README-FUTURO.md).
 
 ```
 index.html      marcação da página (ícones, janelas); nenhum script ou estilo inline
-calculeve.css   tema laranja e componentes exclusivos (bandeja, personagens, tabelas do estoque)
+calculeve.css   tema laranja, cores exclusivas em variáveis no :root (--verde, --rota-re, --rota-rj, --emjob) e componentes exclusivos
 calculeve.js    utilidades comuns (CV) + papel de parede, janela Personagens, Apagar dados, Exportar e Importar dados
 sso.js          login EVE SSO (OAuth2 + PKCE)
 estoque.js      janela Estoque (assets + blueprints)
 mercado.js      preços de mercado e taxas (Mercado), comum a toda a Calculeve
 nerds.js        janela Números para Nerds (Nerds), comum a toda a Calculeve
-fuel.js         janela Fuel Blocks
+fuel.js         janela Fuel Blocks (atalho do Produzir para fuel blocks)
 t2.js           janela Invenção T2 (invenção, decryptors, cadeia, insumos crus, resultado); expõe o motor em `T2`
 brave.js        importa o CSV do Ship Overview da Brave (Brave)
 produzir.js     janela Produzir (blueprints do estoque sem invenção); reusa o motor do t2.js
 estruturas.js   janela Cadastrar Estruturas
 frete.js        janela Cadastrar Freighter Service
+buyback.js      janela Cadastrar Buyback
+appraiser.js    janela Loot Appraiser (rota de venda de cada item colado)
 sde/*.csv       cópia dos dumps do SDE
 Mudanças.md     log de mudanças, mostrado pela janela Log
 ```
 
 Ordem de carregamento: `desktop.js` → `calculeve.js` → `sso.js` → `estoque.js` → `mercado.js` → `nerds.js` → `fuel.js` →
-`t2.js` → `produzir.js` → `estruturas.js` → `frete.js`. O
+`t2.js` → `brave.js` → `produzir.js` → `estruturas.js` → `frete.js` → `buyback.js` → `appraiser.js`. O
 `calculeve.js` vem primeiro porque define o `CV`, usado pelos outros; a montagem da página espera o
 `DOMContentLoaded`, quando `SSO` já existe.
 
@@ -43,7 +45,7 @@ reescrito localmente:
 | `CV.dataHora(data)` | data no formato `dd/mm hh:mm` |
 | `CV.csv(texto)` | linhas de campos de um CSV (aspas, vírgula e quebra de linha dentro do campo); a primeira é o cabeçalho |
 | `CV.sde(arquivo, colunas)` | linhas de um CSV de `sde/`, só com as colunas pedidas (lido uma vez por arquivo) |
-| `CV.tipos()` | `typeID` → `{name, group, vol}`, do `invTypes.csv` |
+| `CV.tipos()` | `typeID` → `{name, group, vol, pub, lote}`, do `invTypes.csv` (`lote` = `portionSize`, unidades por lote de reprocesso) |
 | `CV.esi(path, {token, body})` | chamada à ESI (POST quando há `body`); erro HTTP vira exceção com `.status` |
 | `CV.esiPaginado(path, token)` | junta todas as páginas (`X-Pages`) |
 | `CV.limite(itens, n, fn)` | roda `fn` em cada item com no máximo `n` requisições simultâneas |
@@ -55,32 +57,35 @@ reescrito localmente:
 | `CV.fmt` | formatadores pt-BR: `int`, `qtd` (até 2 casas), `n2` (2 casas fixas), `pct` (1 casa) |
 | `CV.hms(seg)` | segundos → `h:mm:ss` |
 | `CV.status(corpo, msg)` | mensagem de uma linha no lugar do conteúdo de uma janela |
+| `CV.copiavel(texto, valor, classe)` | botão com `texto` que copia `valor` (ou o texto) para a área de transferência e pisca `.copiado`; `classe` troca o visual (padrão `.copia`, sublinhado tracejado; os clipboards da lista de compra usam `btn …`) |
 | `CV.ATIV` | `activityID` do SDE: `FAB` (1), `INV` (8), `REAC` (11) |
 | `CV.industria()` | índice do SDE de indústria, lido uma vez: `produto`, `porProd`, `mat`, `tempo`, `prob`, `skills` e `k(act, bp)` |
 | `CV.bonusSkill()` | bônus de tempo por nível de Industry, Advanced Industry (`act` 1) e Reactions (`act` 11), do dogma |
 | `CV.tudao()` | estoque salvo do Tudão (`null` se não foi baixado) |
 | `CV.estoquePorTipo(snap)` | por tipo: `{ qt, locais }`, somando todos os chars |
+| `CV.qtdProduzida(I, job)` | unidades que o job entrega: `runs × unidades por run` do SDE, só fabricação e reação (ESI `activity_id` 1, 9 ou 11) com status `active`, `paused` ou `ready` e produto que casa com o da blueprint no SDE; senão 0 |
+| `CV.jobAberto(job)` | job ainda não entregue: status `active`, `paused`, `ready` ou sem status (Estoque e `CV.qtdProduzida`) |
+| `CV.emJobPorTipo(snap)` | por tipo: `{ qt, fim }` do que está em job (`job.qtdProd`), somando todos os chars; `fim` é o término do último job do tipo |
 | `CV.blueprints(snap, T, aceita)` | blueprints do estoque que `aceita(typeID, copia)`, uma linha por (tipo, ME, TE, runs, BPO/BPC), ordenadas |
 | `CV.cartao(...)` / `CV.cartaoBp(b, nome, curto)` | cartão clicável das janelas de lista (ícone, nome curto, linha de dados) |
-| `CV.listaBps({ grid, nota, aceita, vazio, extraNota, aoAbrir, secoes, secao, prepara })` | janela de lista de blueprints do Tudão: aviso, cartões e o clique; usada por Invenção T2 e Produzir. Com `secoes` (títulos, em ordem) e `secao(b, T)`, separa em seções com título; `prepara(lista, T)` é async e roda antes; com `busca` (o `<input>` da janela), some o cartão que não casa e a seção que ficou vazia |
+| `CV.listaBps({ grid, nota, aceita, vazio, extraNota, aoAbrir, secoes, secao, prepara, simula, simCopia })` | janela de lista de blueprints do Tudão: aviso, cartões e o clique; usada por Invenção T2 e Produzir. Com `simula`, a busca mostra a seção das blueprints do SDE que o estoque não tem, como BPO simulada (Produzir) ou, com `simCopia`, BPC simulada (Invenção T2). Com `secoes` (títulos, em ordem) e `secao(b, T)`, separa em seções com título; `prepara(lista, T)` é async e roda antes; com `busca` (o `<input>` da janela), some o cartão que não casa e a seção que ficou vazia |
 | `CV.busca(input, aoMudar)` / `CV.contem(texto, termo)` | caixa de busca pelo nome: `busca` chama `aoMudar(termo)` a cada tecla e devolve um getter do termo; `contem` compara sem acento nem maiúscula (termo vazio casa tudo) |
 | `CV.igualaCartoes(raiz)` | põe todos os cartões de `raiz` na largura do maior texto (`--card-w`, medida na tela): grade regular |
 | `CV.grupos(ids)` | id do grupo → `{ n: nome, c: categoria }` (`/universe/groups/{id}/`), cache `calculeve.cache.gruposinfo` |
-| `CV.seletores(prefixo, chaves, aoTrocar)` | os quatro seletores (personagem, mercado, fábrica, freighter service) de uma janela; devolve `{ desenha, escolhido(id), fecha }` |
+| `CV.seletores(prefixo, chaves, aoTrocar)` | os seletores (personagem, mercado, fábrica, reação, refino, freighter service) que a janela pedir em `chaves`; devolve `{ desenha, escolhido(id), fecha }` |
 
 **Seletores.** Quem usa põe no HTML só um contêiner `<div class="escolhas" id="<prefixo>-escolhas">` e
 chama `CV.seletores` com a chave de `localStorage` de cada escolha; os botões e as listas são montados nele. O
 botão mostra a escolha salva, o **×** ao lado tira, e a conta de quem chamou segue sem ela. `aoTrocar` é
-opcional: o Fuel Blocks não usa (a escolha vale na próxima abertura da janela de materiais), a Invenção T2
-usa para refazer a conta na hora.
+opcional: Fuel Blocks, Invenção T2 e Produzir usam para refazer a conta na hora.
 
 Imagem da CCP que não carrega recebe a classe `.falhou` e fica invisível.
 
 ## Área de trabalho
 
-Ícones: **Personagens**, **Estoque**, **Fuel Blocks**, **Invenção T2**, **Produzir** e **Brave** (lado a lado; o botão da Brave, com `assets/icons/Brave.png`, só aparece se
+Ícones: **Personagens**, **Estoque** e **Loot Appraiser** (lado a lado, ícone `lupa` do `ui.svg`), **Fuel Blocks**, **Invenção T2**, **Produzir** e **Brave** (lado a lado; o botão da Brave, com `assets/icons/Brave.png`, só aparece se
 pelo menos um char logado estiver na Brave Collective ou na Brave United, por `CV.brave()`, e abre a janela de importação do CSV), **Cadastrar
-Estruturas** e **Cadastrar Freighter Service** (lado a lado), **Apagar dados**, **Exportar dados** e
+Estruturas**, **Cadastrar Freighter Service** e **Cadastrar Buyback** (lado a lado), **Apagar dados**, **Exportar dados** e
 **Importar dados** (lado a lado) e **Voltar à main**. Papéis de parede em
 `assets/wallpapers/calculeve/`, sorteados como no main, com crédito no selo e na janela Créditos.
 
@@ -101,7 +106,9 @@ que abre a janela com o que são (chars de comparação) e quem são, com a font
 `Mudanças.md` (`fetch`, mesma origem) e mostra um ícone por log: cada linha `# ` do arquivo começa um log, e o texto
 dela é o nome do ícone, na ordem do arquivo. O ícone abre uma segunda janela com o título do log (ícone na cor do app)
 e o texto desenhado num markdown mínimo (`##`/`###`, listas com `- ` aninhadas por 2 espaços, `**negrito**`,
-`` `código` ``). Log novo = nova seção `# ` no `Mudanças.md`.
+`` `código` ``). **Um log por push:** tudo que muda entre um push e o seguinte entra na mesma seção
+`# Log, dd/mm/aaaa` do topo do `Mudanças.md` (com `## Novo`, `## Mudou` e `## Corrigido`), descrevendo o estado em que
+a coisa fica no push, não cada passo até ele. A data é a do push; depois dele, a próxima mudança abre uma seção nova.
 
 **Apagar dados** remove do `localStorage` e do `sessionStorage` toda chave com prefixo
 `calculeve.` e recarrega a página. Depois disso é preciso refazer o login e baixar os estoques de
@@ -158,6 +165,11 @@ abre uma janela com duas abas.
 - Colunas: Nome, Qtd, Grupo, Volume, Preço est. (+ Char no Tudão). Item com nome próprio mostra o
   tipo ao lado.
 - Itens com flag `Implant` ou `Skill` não são listados (o jogo também não lista).
+- **Produto em job:** o que um job de fabricação ou reação ainda não entregue vai produzir aparece como item, em
+  roxo claro (`tr.emjob`), no local de entrega do job (`output_location_id`; dentro do item, se o local for um
+  container conhecido), com `em job · termina dd/mm hh:mm` ao lado do nome. Um item por job. A quantidade é
+  `CV.qtdProduzida`, calculada na coleta e gravada no job do estoque salvo (`qtdProd`); estoque salvo antes disso
+  não tem, até o próximo Atualizar. Não é asset: não entra no `CV.estoquePorTipo` nem em conta nenhuma.
 
 **Busca.** A caixa ao lado das abas filtra pelo nome nas duas abas (sem acento, sem diferença de maiúscula) e
 zera ao abrir outro char. Em Personal Assets, o item casa pelo nome (ou pelo tipo, se tem nome próprio); ficam os
@@ -201,20 +213,13 @@ espaço do navegador, o salvamento é pulado (aviso no console) e a janela conti
 
 ## Fuel Blocks (fuel.js)
 
-No topo, quatro botões de escolha, cada um abrindo sua lista; o escolhido aparece no botão (imagem e
-nome) e fica salvo no navegador. O **×** ao lado de cada botão tira a escolha, e a conta segue sem ela:
-
-| Botão | Opções | Sem escolha | Chave |
-|---|---|---|---|
-| **Escolher personagem** | chars logados + os fictícios **Saitama** (ícone `Sai.png`, todas as skills no 5) e **Mr. Satan** (ícone `Satan.png`, todas no 0) — quem vai fabricar | todas as skills no 0 | `calculeve.fuel.char` |
-| **Escolher mercado** | estruturas de mercado cadastradas | sem dados de mercado: todo número de preço vira `SP` (sem preço) | `calculeve.fuel.mercado` |
-| **Escolher fábrica** | estruturas de indústria cadastradas | estrutura sem bônus nenhum | `calculeve.fuel.fabrica` |
-| **Escolher freighter service** | freighter services cadastrados — frete do CustoJita | frete 0 (o jogador leva) | `calculeve.fuel.frete` |
+Atalho do Produzir para fuel blocks. No topo, os cinco seletores (personagem, mercado, fábrica, reação, freighter
+service), com chaves próprias (`calculeve.fuel.char` / `.mercado` / `.fabrica` / `.reacao` / `.frete`); trocar qualquer um refaz a conta do
+lote aberto por esta janela.
 
 A janela tem duas divisões de ícones — blueprints de fuel block em cima, isótopos embaixo — e lê
-tudo do **estoque salvo do Tudão**
-(`calculeve.estoque.tudo`). Não consulta a ESI: para ver o estado atual, atualizar o Tudão no
-Estoque antes. Sem Tudão salvo, a janela avisa.
+tudo do **estoque salvo do Tudão** (`calculeve.estoque.tudo`). Não consulta a ESI: para ver o estado atual, atualizar
+o Tudão no Estoque antes. Sem Tudão salvo, a janela avisa.
 
 - **Quais blueprints:** as que têm, no `industryActivityProducts.csv`, fabricação (`activityID` 1)
   de um produto do grupo Fuel Block (`groupID` 1136 no `invTypes.csv`).
@@ -225,62 +230,10 @@ Estoque antes. Sem Tudão salvo, a janela avisa.
   todos os chars; `Locais` é quantos locais diferentes têm o isótopo — local é a raiz do item
   (estação, estrutura ou sistema), como no agrupamento da aba Personal Assets, então nave ou
   container conta como o local onde está.
-- **Materiais:** clicar numa blueprint abre a janela de materiais com o ME dela; clicar num isótopo
-  abre a do fuel block que consome aquele isótopo, com a blueprint de maior ME do estoque. Sem
-  blueprint desse tipo no estoque, a janela avisa e calcula com ME 10.
-
-**Janela de materiais.** Caixa de **Runs** (inteiro ≥ 1), botões **Max estoque** e **Zerar estoque**,
-dois blocos, **PIs** e **Gelo**, cada um com Item · Necessário · Estoque · Saldo, e embaixo o bloco
-**Resultado**: o fuel block produzido e a quantidade, `runs × unidades por run` (`quantity` do
-`industryActivityProducts.csv`), numa célula que ocupa as três colunas de número.
-
-- Receita: `industryActivityMaterials.csv`, fabricação (`activityID` 1) da blueprint.
-- Gelo = material do grupo Ice Product (`groupID` 423); o resto da receita vai em PIs.
-- Necessário = `MAX(runs; ROUNDUP(runs × qtd base × (1 − ME) × bônus da estrutura))`, a mesma conta da
-  aba Fuel Blocks da planilha.
-- Bônus da estrutura = `(1 − ME da estrutura) × (1 − ME do rig)` de fabricação, da **fábrica
-  escolhida** (bônus salvos em Cadastrar Estruturas); sem fábrica, 1.
-- **Tempo** (embaixo de Runs) = `tempo base × runs × (1 − TE da BP) × (1 + bônus Industry × nível) ×
-  (1 + bônus Advanced Industry × nível) × (1 − TE da estrutura) × (1 − TE do rig)`, no formato `h:mm:ss`. Tempo base:
-  `industryActivity.csv`, fabricação. Skills: `active_skill_level` de `/characters/{id}/skills/`
-  (scope `esi-skills.read_skills.v1`) do **personagem escolhido**, consultado uma vez por char
-  enquanto a página está aberta (sem personagem ou Mr. Satan, 0; Saitama, 5). Bônus por nível (em %, negativo reduz) lidos do SDE: atributo
-  `manufacturingTimeBonus` da skill Industry e `advancedIndustrySkillIndustryJobTimeBonus` da Advanced
-  Industry, em `dgmTypeAttributes.csv` (nome do atributo em `dgmAttributeTypes.csv`).
-- Estoque = soma do item em todos os chars e locais do Tudão.
-- **Preço (UnMerc)** (4ª coluna, também no Resultado): duas linhas, **Sell** e **Buy**, do mercado escolhido,
-  pelo `Mercado` (seção abaixo). Materiais usam `Mercado.compra`; o fuel block do Resultado,
-  `Mercado.venda`. Sem ordem daquele lado: `NÃO TEM`. Sem mercado escolhido: `SP` (sem preço) em
-  toda célula de preço, no CustoMerc, no Total e na Receita. Sem o broker do dono cadastrado, a célula
-  diz que falta. As taxas usam o Accounting do personagem (sem personagem ou Mr. Satan, 0; Saitama, 5). Os preços salvos são reusados; **Atualizar preços**
-  baixa de novo (a hora aparece ao lado).
-- **CustoMerc** (5ª coluna dos materiais): se o Saldo é negativo, `−saldo × menor sell` (o que falta,
-  comprado direto na sell order, sem taxa); com Saldo ≥ 0, `—`.
-- **CustoJita** (6ª coluna dos materiais; o Resultado não tem): se o Saldo é negativo, `−saldo × (menor
-  sell de Jita 4-4 + frete por unidade)`; com Saldo ≥ 0, `—`. Frete por unidade = `Mercado.frete` com o
-  **freighter service escolhido** (sem serviço, 0). Não depende do mercado escolhido nem do personagem.
-  **Atualizar preços** baixa de novo também os preços de Jita.
-- **Total a comprar** (linha entre Gelo e Resultado, na coluna do CustoMerc): soma do CustoMerc de
-  todos os materiais. Se algum material que falta não tem sell order, `NÃO TEM`.
-- **Receita** (5ª coluna do Resultado), duas linhas: **ReceitaSellMerc** = `qtd × Sell` de
-  `Mercado.venda` (sell order na menor sell, líquido de broker e sales tax) e **ReceitaBuyMerc** =
-  `qtd × Buy` (direto na maior buy, líquido de sales tax).
-- **Números para Nerds** (botão embaixo de Atualizar preços): abre uma janela com **DeltaSellMerc** =
-  ReceitaSellMerc − Total a comprar e **DeltaBuyMerc** = ReceitaBuyMerc − Total a comprar; separado deles,
-  **VendaInsumosBuyMerc** = o Necessário de cada material vendido direto na maior buy (líquido de sales
-  tax), **DeltaSellInsumos** = ReceitaSellMerc − VendaInsumosBuyMerc e **DeltaBuyInsumos** =
-  ReceitaBuyMerc − VendaInsumosBuyMerc; e um terceiro grupo, **VendaInsumosSellMerc** = o Necessário de
-  cada material vendido em sell order na menor sell (líquido de broker e sales tax),
-  **DeltaSellInsumosSell** = ReceitaSellMerc − VendaInsumosSellMerc e **DeltaBuyInsumosSell** =
-  ReceitaBuyMerc − VendaInsumosSellMerc. Tudo da conta que está na janela de materiais naquele momento.
-  A janela é a do `Nerds` (seção abaixo).
-- Saldo = Estoque − Necessário; verde se positivo, vermelho se negativo.
-- Runs de um material = quantas runs o estoque dele aguenta, pela mesma conta do Necessário: parte de
-  `ROUNDDOWN(estoque ÷ (qtd base × (1 − ME) × bônus da estrutura))` e desce uma run enquanto o Saldo
-  dele ficar negativo.
-- Max estoque: o **menor** valor entre todos os materiais (PIs e Gelo) — Saldo ≥ 0 em todos.
-- Zerar estoque: o **maior** valor entre todos os materiais — o Saldo negativo dos outros é o que falta
-  comprar para gastar o estoque.
+- **Clique:** abre o **lote do Produzir** (`Produzir.abre(b, snap, sel)`, com os seletores desta janela): a mesma
+  janela, conta, Resultado, buybacks e Nerds do Produzir. Na blueprint, com o ME/TE/runs dela; no isótopo, com a
+  blueprint de maior ME do estoque do fuel block que consome aquele isótopo. Sem essa blueprint no estoque, abre como
+  **BPO simulada** com ME 10 e TE 0 (campos editáveis, como no Produzir).
 
 ## Mercado (mercado.js)
 
@@ -292,7 +245,8 @@ do §4 do `DOC_planilha`.
   tipo, com a hora. `Mercado.precos(estr)` devolve o salvo (ou baixa se não houver);
   `Mercado.atualiza(estr)` baixa de novo.
 - **Taxas** (`Mercado.taxas(estr, skills)`):
-  - sales tax = 7,5% × (1 − 11% × nível de Accounting do char);
+  - sales tax = 7,5% × (1 − 11% × nível de Accounting do char) — sozinha em `Mercado.salesTax(skills)`, para quem só
+    vende direto em buy order e não precisa do broker;
   - broker = 0,5% fixo da SCC + o broker do dono cadastrado na estrutura (Broker Relations não conta em
     Upwell).
 - **Por unidade:**
@@ -314,7 +268,9 @@ do §4 do `DOC_planilha`.
   Sem serviço: 0.
 - **Exibição de ISK:** `Mercado.isk(v)` — 2 casas, com `k` (≥ mil), `m` (≥ milhão) e `bi` (≥ bilhão); `Mercado.iskOuNaoTem(v)` mostra `NÃO TEM` para `null`.
 - **Preços da ESI:** `Mercado.precosEsi()` baixa `/markets/prices/` uma vez por carga da página (`average_price` no Estoque, `adjusted_price` no custo de job).
-  Todo valor em ISK da Calculeve passa por ela (Fuel Blocks e o Preço est. do Estoque).
+  Todo valor em ISK da Calculeve passa por ela.
+- **Buyback** (`Mercado.buyback(bb, tipo, grupo, jitaBuy)`): `% do buyback − taxa adicional da exceção` sobre o
+  maior buy de Jita 4-4, sem frete nem taxa. A exceção do item vale no lugar da do grupo dele. Devolve `{pct, un}`.
 
 ## Números para Nerds (nerds.js)
 
@@ -326,19 +282,32 @@ se positivo e vermelho se negativo (`CV.sinal`). Os textos são genéricos ("o i
 materiais"), para servir a qualquer aba. Cada métrica (e cada taxa: broker, sales tax) tem uma
 explicação só, com a conta dela (`{t, ver}`); o que ela cita não é explicado de novo — aparece em `ver`
 e vira botão embaixo do texto, que abre a explicação própria. `Nerds.rotulo(nome)` devolve o
-botão (ou texto, se não há explicação) e é usado em toda janela que mostra a métrica — no Fuel Blocks:
-Total a comprar, ReceitaSellMerc e ReceitaBuyMerc. Métrica nova com explicação: entra em `EXPLICA`.
+botão (ou texto, se não há explicação) e é usado em toda janela que mostra a métrica. Métrica nova com explicação:
+entra em `EXPLICA`.
 
 ## Invenção T2 (t2.js)
 
 Molde da aba de produção com invenção da planilha (§5.3b do `DOC_planilha`), genérico: serve para qualquer
-T2 inventado, não para um item só. Os quatro seletores do topo são os mesmos do Fuel Blocks (personagem,
-mercado, fábrica, freighter service), em chaves próprias; trocar qualquer um refaz a conta na hora.
+T2 inventado, não para um item só. Os cinco seletores do topo (personagem, mercado, fábrica, reação, freighter service)
+ficam em chaves próprias; trocar qualquer um refaz a conta na hora.
 
 A janela lista, do **estoque salvo do Tudão**, uma por linha de ME/TE/runs, as **BPC** que têm invenção
 (`activityID` 8 no `industryActivityProducts.csv`). Só cópia: invenção não roda em BPO. Clicar numa abre o
 lote, com **Jobs** (abre em 100) e **Runs sobrando** (o excedente da invenção anterior, que entra no alvo de fabricação e
 muda o que comprar, não a economia da invenção).
+
+**Blueprint que você não tem.** Com algo digitado na busca, embaixo das BPC do estoque aparece a seção
+**Blueprints que você não tem — BPC simulada**: as blueprints publicadas do SDE com invenção que casam com o termo e
+não estão no estoque (mesma regra e mesmo teto de 60 do Produzir). O clique abre o lote como uma BPC do estoque, com
+`BPC T1 simulada (não está no estoque)` no lugar do ME/TE: ME e TE da BPC T1 não entram na conta da invenção, então
+não há campo para eles.
+
+**Mais de um T2.** Algumas BPC T1 inventam mais de um T2 (`CV.industria().inv`: todos os produtos de invenção da
+blueprint; ex.: Nova Cruise Missile → Fury ou Precision). No jogo quem escolhe é o jogador, no job (*Outcome*,
+[EVE University Wiki](https://wiki.eveuniversity.org/Invention)); não há sorteio. Nesse caso, ao lado do título
+**Invenção** aparece um ícone por T2 possível (`.inv-prod`, o da conta com `aria-pressed`); o lote abre no primeiro
+do dump, e clicar em outro troca o produto e refaz carga e conta (cadeia, insumos, resultado, histórico). Produto de
+invenção cujo T2 não tem fabricação no SDE fica de fora.
 
 **Invenção.** Os parâmetros ficam numa grade de cinco colunas, rótulo em cima e valor embaixo. Chance =
 `base × (1 + (ciência1 + ciência2)/30 + encryption/40) × multiplicador do decryptor`
@@ -370,7 +339,7 @@ fica com a que casa o nome (`<item> Blueprint` ou `<item> Reaction Formula`).
 - **Três vias:** produzir · comprar na estrutura (menor sell do mercado escolhido) · comprar em Jita
   (menor sell de Jita 4-4 + frete do freighter service). A **melhor rota** é a menor das três e sai na cor da
   via que ganhou; nenhuma expressão de custo é repetida.
-- **Colunas, nesta ordem:** item · BP · runs a fazer · estoque · comprar (un) · **Produzir** · **Comprar (E)**
+- **Colunas, nesta ordem:** item · BP · runs a fazer · estoque · **em job** · **termina** · comprar (un) · **Produzir** · **Comprar (E)**
   · **Comprar (J)** · **melhor rota**, e depois qtd no ciclo, horas de fila e sobra. As três vias e a melhor
   rota saem coloridas, número incluído: verde produzir, ciano estrutura (`.rota-e`), rosa claro Jita
   (`.rota-j`) — as cores são as mesmas em toda a Calculeve (tabela de classes no README da raiz). O que não
@@ -381,20 +350,36 @@ fica com a que casa o nome (`<item> Blueprint` ou `<item> Reaction Formula`).
 - **Poda:** nó cujo pai virou COMPRAR fica `— desnecessário` e some da conta. A raiz é sempre construída — a
   BPC veio da invenção.
 - **Qtd de material:** `MAX(1; base × (1 − ME) × bônus da estrutura)` (§5.15 do `DOC_planilha`), com a qtd
-  base (ME 0) do `industryActivityMaterials.csv`. O **ME** é o da blueprint no estoque (0 para a que não
-  está lá); o da raiz é o da BPC inventada, com o decryptor. Reação não tem ME — pega o rig de reação.
-- **Tempo/run:** tempo base do SDE × `(1 − TE da BP)` × bônus das skills × bônus de tempo da estrutura. Na
+  base (ME 0) do `industryActivityMaterials.csv`. O **ME** é o da blueprint que **consome** o material (a do job),
+  tirado do estoque (0 para a que não está lá); o da raiz é o da BPC inventada, com o decryptor. O bônus da estrutura na fabricação é o da **fábrica**
+  escolhida: `(1 − ME da estrutura) × (1 − ME do rig de fabricação)`. Reação não tem ME e roda em outra estrutura
+  (normalmente uma refinaria): pega só o da estrutura escolhida em **reação**, `MAX(1; base × (1 − ME do rig de
+  reação))`. Sem a escolha, sem bônus.
+- **Tempo/run:** tempo base do SDE × `(1 − TE da BP)` × bônus das skills × bônus de tempo da estrutura (TE da
+  estrutura e do rig: da fábrica na fabricação, da estrutura de reação na reação). Na
   fabricação as skills são Industry e Advanced Industry; na reação, Reactions — os três bônus por nível saem
   do dogma (`manufacturingTimeBonus`, `advancedIndustrySkillIndustryJobTimeBonus`, `reactionTimeBonus`).
 
 **Custo de job.** `EIV × índice do sistema`, por run: o EIV é `Σ (qtd base ME 0 × adjusted_price)` de
-`/markets/prices/`, e o índice é o da atividade (`manufacturing`, `reaction`) no sistema da **fábrica
-escolhida**, de `/industry/systems/`. Sem fábrica escolhida, 0. O job de invenção **não** entra nessa conta.
+`/markets/prices/`, e o índice é o da atividade (`manufacturing`, `reaction`) no sistema da estrutura escolhida
+para ela — **fábrica** na fabricação, **reação** na reação —, de `/industry/systems/`. Sem a escolha, 0. O job de invenção **não** entra nessa conta.
 
-**Insumos crus.** Uma linha por folha da árvore: qtd no ciclo, estoque, comprar (un), **Comprar (E)**,
+**Em job / Termina** (Cadeia e Insumos crus): quanto do item está saindo de job de fabricação ou reação ainda não
+entregue, somando os chars do Tudão, e o término do último desses jobs (`CV.emJobPorTipo`), em roxo claro (`td.emjob`);
+sem job, `0` e `—` em cinza. No nó CONSTRUIR, o em job conta como run feita: **Runs a fazer** =
+`⌈MAX(0; demanda − estoque − em job) / rend⌉` e **Sobra** = `estoque + em job + runs × rend − demanda`; a demanda dos
+filhos cai junto. A raiz não desconta (o lote é o que se pediu). O Estoque continua sendo só o de assets e o
+Comprar (un) da folha não muda.
+
+**Insumos crus.** Uma linha por folha da árvore: qtd no ciclo, estoque, em job, termina, comprar (un), **Comprar (E)**,
 **Comprar (J)** e a **melhor rota**, que aqui é o gasto de hoje (o que falta comprar × o preço da rota que
 ganhou), na cor dela — e em verde quando dá zero, que é o estoque cobrindo a linha inteira. É a lista de compra: o fuel block é nó com decisão própria, mas os insumos dele
 aparecem aqui.
+
+**Copiar o que comprar.** Na Cadeia e nos Insumos crus, toda linha ativa cuja melhor rota é comprar (estrutura ou
+Jita) e que tem Comprar (un) > 0 mostra o **nome** e o **Comprar (un)** como botões (`CV.copiavel`, sublinhado
+tracejado): o clique copia para a área de transferência o nome, ou a quantidade sem separador de milhar, e o botão
+pisca verde. Vale em Invenção T2, Produzir e Fuel Blocks.
 
 **Resultado.** O item inventado não é linha da cadeia — ele é o resultado, e fica aqui: runs a fazer,
 unidades, custo de produzir por unidade e as **quatro rotas de venda por unidade**, com os nomes do Fuel
@@ -422,17 +407,38 @@ sem login; a região sai do sistema da estrutura cadastrada): **Preço médio** 
 volume) e **Qtd média por dia** (volume dos 30 dias ÷ 30; dia sem negociação conta zero). É a região inteira, não só
 a estrutura. Estrutura cadastrada sem sistema não mostra o histórico. **Atualizar preços** baixa de novo.
 
+**Lista de compra (clipboard)** — embaixo do Resultado, em Invenção T2, Produzir e Fuel Blocks (`secClipboard`).
+**Clipboard E** e **Clipboard J** copiam a lista, um item por linha, `nome<TAB>quantidade` (o formato em que o jogo
+copia uma lista de itens), em ordem alfabética: o **Comprar (un)** de tudo que a melhor rota manda comprar, na Cadeia e
+nos Insumos crus, mais, na invenção, datacores e decryptor do lote inteiro (eles nunca descontam estoque). O E leva o
+que se compra na estrutura; o J, o que se compra em Jita. Lista vazia deixa o botão desabilitado. Check box, guardados
+no lote aberto (`ctx.compraTudo`, `ctx.deVerdade`, `ctx.semReacao`) e refletidos na Cadeia, nos Insumos crus e no
+Resultado:
+
+- **Não gosto de reação** — independe dos outros dois (sozinho desconta o estoque). No `efetivo` do motor, todo nó que não é o item final perde a via produzir quando tem
+  ordem de venda na estrutura ou em Jita: os materiais da blueprint do item final são comprados prontos e só o job
+  dele é feito. Sem ordem em nenhuma das duas, continua produzindo.
+- **Comprar tudo** — conta com estoque e em job zerados (`no.estoque` e `no.emJob` = 0): compra tudo que o ciclo
+  consome. Rota e decisão de produzir ou comprar não mudam; os dois clipboards continuam separados. Marcado, aparece o
+  de baixo; desmarcar desmarca ele.
+- **COMPRAR TUDO DE VERDADE** — só com Comprar tudo marcado: junta os dois num botão só, **Clipboard (tudo)**, com a
+  lista completa.
+
+O botão **Que diabo são esses check box?** (`Nerds.rotulo`) abre a explicação de cada um.
+
+Abaixo, a grade dos **buybacks cadastrados** (`Buyback.grade`, seção Cadastrar Buyback).
+
 **Números para Nerds.** O resto da conta: o saldo aberto, o **desembolso de hoje** (o que falta comprar
 depois do estoque, por rota), a invenção em detalhe (datacores, decryptor, chance, cópias,
 unidades), a venda (as rotas por unidade, receita, margem, horas de fila e ISK por hora de fila), o ROI de cada rota de venda e o da melhor rota e o
 rend/run com o tempo/run de cada nó da cadeia. A
 venda compara sell order no mercado, buy order no mercado e **Jita buy líquido menos o frete**. Buyback por
-contrato não entra — o site não tem programa de buyback cadastrado.
+contrato não entra no Nerds; os buybacks cadastrados aparecem só no Resultado.
 
 ## Produzir (produzir.js)
 
 A Invenção T2 sem a invenção: uma linha de produção normal, a partir de qualquer blueprint do estoque. Os
-quatro seletores do topo são os mesmos (chaves próprias, `calculeve.prod.*`); trocar qualquer um refaz a conta.
+cinco seletores do topo são os mesmos (chaves próprias, `calculeve.prod.*`); trocar qualquer um refaz a conta.
 
 A janela lista, do **estoque salvo do Tudão**, toda blueprint com fabricação (`activityID` 1), **BPO e
 BPC**, T1 e T2, uma por linha de ME/TE/runs (fórmula de reação fica de fora). Clicar numa abre o lote, com o
@@ -469,6 +475,55 @@ ciclo (**Qtd no ciclo**) é sempre arredondada para cima, por job: `⌈runs × q
 **Resultado e Nerds** são os da Invenção T2, sem os blocos de invenção e de decryptors. O item fabricado é o
 Resultado; a cadeia lista só o que ele consome.
 
+## Loot Appraiser (appraiser.js)
+
+Cola-se a lista de itens como o jogo copia (uma linha por item: nome, tab, quantidade; o resto da linha é ignorado).
+Item sem quantidade conta 1; nome repetido soma. A tabela sai em ordem alfabética (ver Ordenar), uma linha por item, com o valor do
+item inteiro em cada uma das quatro rotas e a **melhor** em negrito, na cor da rota. Nome que não está no
+`invTypes.csv` sai como `não encontrado no SDE`. **Avaliar** calcula; **Atualizar preços** baixa de novo o mercado e
+Jita. Seletores (chaves `calculeve.lap.*`): personagem, mercado, **refino** (estrutura de indústria onde se
+reprocessa) e freighter service; trocar qualquer um refaz a conta. **Ordenar:** Item, Qtd e as quatro rotas no
+cabeçalho são botões (`.ordena`, o ativo com `aria-pressed`, na cor do app). Item volta à ordem alfabética, que é a
+padrão; os outros ordenam do maior para o menor (sem valor vai para o fim). Melhor não ordena. A ordem escolhida
+vale até trocar, inclusive numa nova avaliação. Acima da tabela, uma linha só:
+`Preços: <data> · <rendimento>% · Scrapmetal Processing (<nível>)`; a data é a mais antiga entre mercado e Jita (os dois
+são atualizados juntos), e o rendimento sai como um número só quando estrutura e Jita dão igual, senão os dois.
+
+| Rota | Cor | Conta (item inteiro) |
+|---|---|---|
+| **Estrutura** | ciano (`.rota-e`) | `qtd × maior buy do mercado × (1 − sales tax)` |
+| **Jita** | rosa (`.rota-j`) | `qtd × (maior buy de Jita 4-4 × (1 − sales tax) − frete por unidade)` |
+| **Refino na estrutura** | verde (`.rota-re`) | minerais no maior buy do mercado × (1 − sales tax), com o rendimento e a taxa da estrutura de refino |
+| **Refino em Jita** | pêssego (`.rota-rj`) | minerais no maior buy de Jita × (1 − sales tax), com o rendimento e a taxa de Jita 4-4, menos o frete do item inteiro |
+
+- **Venda:** sempre direto na buy order: só sales tax (`Mercado.salesTax`), sem broker.
+- **Reprocesso:** a receita é a do `invTypeMaterials.csv` por **lote** (`portionSize`). Lotes = `⌊qtd / lote⌋`;
+  cada material rende `qtd da receita × lotes × rendimento × (1 − taxa)`. A sobra abaixo de um lote cheio é vendida
+  inteira no buy do mesmo lugar. **Item que não refina** (sem receita, ou menos de um lote) entra **inteiro** nas rotas
+  de refino, vendido no buy do mesmo lugar: Refino na estrutura = Estrutura, Refino em Jita = Jita; na tabela essas
+  células saem em itálico (`td.inteiro`), com a explicação no `title`.
+- **Rendimento:** base × `(1 + bônus por nível × nível de Scrapmetal Processing do char)`. O bônus por nível é o
+  `refiningYieldMutator` da skill, do dogma do SDE. A base na estrutura é o `refiningYieldMultiplier` do
+  **Standup Reprocessing Facility I** (dogma do SDE); em Jita, o `reprocessing_efficiency` de
+  `/universe/stations/60003760/`.
+- **Taxa de refino:** na estrutura, o campo **Taxa de refino (%)** da estrutura de indústria em Cadastrar Estruturas
+  (a ESI não informa); em Jita, o `reprocessing_stations_take` da estação, que é a taxa **base** (sem o desconto de
+  standing). Aplicada como fração do que o reprocesso devolve.
+- **Frete:** `Mercado.frete` do freighter service escolhido, por unidade do item, com o maior buy de Jita do item
+  como colateral. Sem serviço, 0.
+- Rota que não dá para calcular (sem preço, sem receita, sem mercado ou sem refino escolhido) sai `—` em cinza; sem
+  nenhuma rota, `sem preço`. Os avisos do que falta escolher ou cadastrar ficam acima da tabela.
+
+**Veredito do lote.** Embaixo da tabela, em grade (rótulo em cima, valor embaixo), o lote inteiro por cada uma das
+quatro rotas e, na linha de baixo, a diferença para a melhor; a melhor leva um **V** verde. É a soma das linhas (item
+que não refina já entra inteiro nas rotas de refino); item sem preço numa rota conta 0 nela; item não encontrado no
+SDE fica de fora. Embaixo, a nota: item que não refina entra inteiro, e misturar itens que refinam com itens que não
+refinam pode deixar o appraisal de refino impreciso.
+
+**Números para Nerds** (botão embaixo de Avaliar): os parâmetros da conta (sales tax, Scrapmetal Processing,
+rendimento e taxa de refino de estrutura e Jita, freighter service) e o lote por rota (`Lote — <rota>`), cada um com a
+explicação dele em `Nerds.EXPLICA`.
+
 ## Cadastrar Estruturas (estruturas.js)
 
 - Caixa de busca (mínimo 3 letras) → `/characters/{id}/search/?categories=structure`, com **cada** char
@@ -483,7 +538,7 @@ Resultado; a cadeia lista só o que ele consome.
   - **Engineering Complex** (grupo 1404: Raitaru, Azbel, Sotiyo) e **Refinery** (grupo 1406: Athanor,
     Tatara) → estrutura de **indústria**; abre a janela de bônus, em %: ME da estrutura — fabricação ·
     ME do rig — fabricação · ME do rig — reação · TE da estrutura — fabricação · TE do rig — fabricação
-    · TE da estrutura — reação · TE do rig — reação. Estrutura e rig separados, como no jogo; skill não
+    · TE da estrutura — reação · TE do rig — reação · Taxa de refino. Estrutura e rig separados, como no jogo; skill não
     entra aqui (vem do char). Campo vazio vale 0.
   - Outro tipo não é clicável.
 - Cadastrar de novo a mesma estrutura substitui a anterior (reabre os valores já salvos).
@@ -495,7 +550,23 @@ Resultado; a cadeia lista só o que ele consome.
 Lista dos serviços de frete cadastrados, com **Editar** e **Remover**, e o botão **+ Adicionar
 freighter service**. Cada serviço tem nome e os três valores do frete do §4 do `DOC_planilha`: **ISK
 por m³**, **% do colateral** e **frete mínimo por contrato** (ISK). Campo numérico vazio vale 0. O
-escolhido no Fuel Blocks entra no frete do CustoJita (`Mercado.frete`).
+escolhido no seletor de freighter service entra no frete por unidade (`Mercado.frete`).
+
+## Cadastrar Buyback (buyback.js)
+
+Lista dos buybacks cadastrados, com **Editar** e **Remover**, e o botão **+ Adicionar buyback**. Cada buyback tem
+**nome**, **% do Jita buy** e **exceções**. A exceção é de um **grupo** ou de um **item** e tem uma **taxa adicional**
+em pontos percentuais, descontada da %: 93% com 3 de taxa adicional no grupo Fuel Block = 90% para todo fuel block.
+A exceção do item vale no lugar da do grupo dele.
+
+Para pôr uma exceção, a busca (mín. 3 letras, sem acento nem maiúscula) procura nos itens publicados do `invTypes.csv`
+e mostra os 15 primeiros em ordem alfabética; cada resultado tem **+ Item** e **+ Grupo: <nome>** (nome do grupo por
+`CV.grupos`). A taxa adicional se edita na linha da exceção. Nada é gravado antes do **Salvar**.
+
+**Grade no Resultado** (`Buyback.grade(alvo, tipo, grupo, jitaBuy, qtd)`), usada por Invenção T2 e
+Produzir (e, por ele, Fuel Blocks): um campo por buyback, `Buyback — <nome> (<%>)`, com `qtd × Jita buy × %` (`Mercado.buyback`, exceção do item
+ou do grupo do item produzido). Sem Jita buy, `NÃO TEM`; enquanto Jita carrega, o texto do estado. Sem buyback
+cadastrado, a grade não aparece.
 
 ## Dados no navegador
 
@@ -505,11 +576,13 @@ escolhido no Fuel Blocks entra no frete do CustoJita (`Mercado.frete`).
 | `calculeve.pkce` | sessionStorage | verifier e state do login em andamento |
 | `calculeve.estoque.<id>` / `calculeve.estoque.tudo` | localStorage | estoque salvo |
 | `calculeve.estruturas` | localStorage | `{mercado: [{id, name, type, sys, sistema, taxas}], industria: [{…, bonus}]}` |
-| `calculeve.fuel.char` / `.mercado` / `.fabrica` / `.frete` | localStorage | escolhas do Fuel Blocks (id do char / da estrutura) |
-| `calculeve.t2.char` / `.mercado` / `.fabrica` / `.frete` | localStorage | escolhas da Invenção T2 |
-| `calculeve.prod.char` / `.mercado` / `.fabrica` / `.frete` | localStorage | escolhas do Produzir |
+| `calculeve.fuel.char` / `.mercado` / `.fabrica` / `.reacao` / `.frete` | localStorage | escolhas do Fuel Blocks (id do char / da estrutura) |
+| `calculeve.t2.char` / `.mercado` / `.fabrica` / `.reacao` / `.frete` | localStorage | escolhas da Invenção T2 |
+| `calculeve.prod.char` / `.mercado` / `.fabrica` / `.reacao` / `.frete` | localStorage | escolhas do Produzir |
 | `calculeve.mercado.<id>` | localStorage | `{ts, p: {typeID: [menor sell, maior buy]}}` da estrutura de mercado |
 | `calculeve.fretes` | localStorage | `[{id, nome, iskM3, pctColat, minimo}]` |
+| `calculeve.lap.char` / `.mercado` / `.refino` / `.frete` | localStorage | escolhas do Loot Appraiser |
+| `calculeve.buybacks` | localStorage | `[{id, nome, pct, exc: [{tipo: "g" \| "i", id, nome, taxa}]}]` |
 | `calculeve.mercado.jita` | localStorage | `{ts, p: {typeID: [menor sell, maior buy]}}` de Jita 4-4, só dos tipos já consultados |
 | `calculeve.cache.regiao` / `calculeve.cache.regiaosis` / `calculeve.cache.volumes` | localStorage | região de Jita · região por sistema · volume embalado por tipo |
 | `calculeve.mercado.hist.<região>` | localStorage | `{ts, p: {typeID: [preço médio 30 dias, unidades por dia]}}`; refeito depois de 24 h |

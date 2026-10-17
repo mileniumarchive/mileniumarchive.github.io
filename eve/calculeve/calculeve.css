@@ -6,6 +6,11 @@
   --title-a:#2a1f14;
   --title-b:#1e160f;
   --win-w:420px;
+  /* cores exclusivas da Calculeve (as de rota de compra estrutura/Jita ficam no base.css) */
+  --verde:#5cb85c;            /* positivo, produzir, copiado, melhor */
+  --rota-re:#8fd16a;          /* refino na estrutura (Loot Appraiser) */
+  --rota-rj:#f5b78a;          /* refino em Jita (Loot Appraiser) */
+  --emjob:#b48cf0;            /* produto de job ainda não entregue */
 }
 
 /* bandeja flutuante no canto inferior direito (não há barra de tarefas) */
@@ -55,6 +60,8 @@ tr.it.pai td:first-child{cursor:pointer}
 .ico{width:24px;height:24px;vertical-align:middle;margin-right:8px;border-radius:3px}
 .ico.falhou{visibility:hidden}
 .sub{color:var(--muted);margin-left:6px}
+/* produto de job ainda não entregue: linha no Estoque e colunas Em job / Termina das janelas de lote */
+table.as tr.emjob td,table.as tr.emjob td .sub,table.as td.emjob{color:var(--emjob)}
 
 /* segurança do sistema */
 .sec{font-weight:600;margin-right:6px;color:var(--muted)}
@@ -83,12 +90,9 @@ tr.it.pai td:first-child{cursor:pointer}
 .icon .bp-dados{font-size:11px;margin-top:2px}
 .divisao{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
 .icon.bp{cursor:pointer}
-#w-fmat{--win-w:100vw}
 .fmat-topo{display:flex;align-items:center;gap:12px;justify-content:space-between}
 .fmat-runs{display:flex;align-items:center;gap:8px}
-#fmat-tempo{text-align:right;margin-top:6px;color:var(--accent)}
 .fmat-precos{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:6px}
-#fmat-precos-ts{font-size:11px;color:var(--muted)}
 #w-nerd table.as{min-width:0}
 #w-nerd table.nerd + table.nerd{margin-top:18px}
 #explica-texto{white-space:pre-line}
@@ -99,13 +103,18 @@ tr.it.pai td:first-child{cursor:pointer}
 table.as td.preco{line-height:1.35}
 table.as td.preco .lado{color:var(--muted);margin-right:6px}
 table.as tr.total td{font-weight:600;border-top:1px solid var(--line)}
-#w-fmat table.as{min-width:0}
-.pos{color:#5cb85c}
+.pos{color:var(--verde)}
+.copia{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:copy;border-bottom:1px dashed rgba(var(--accent-rgb),.6)}
+.copia:hover{color:var(--accent-light);border-bottom-color:var(--accent-light)}
+.copia.copiado{color:var(--verde);border-bottom-color:var(--verde)}
 .neg{color:var(--danger-line)}
 
 /* ---------- estruturas ---------- */
 #w-estr{--win-w:720px}
 .estr-busca{display:flex;gap:8px}
+.bb-busca{width:100%;margin:10px 0 4px}
+.bb-taxa{display:flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap}
+#bbf-res .cad b,#bbf-exc .cad b{font-weight:500}
 #estr-q{flex:1;padding:5px 8px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:var(--text);font:inherit}
 #estr-body{margin-top:10px}
 #estr-body tr.clica{cursor:pointer}
@@ -127,6 +136,30 @@ table.as tr.total td{font-weight:600;border-top:1px solid var(--line)}
 .janela-lote{--win-w:1280px;--content-h:78vh;top:6%}
 .janela-lote table.as{min-width:0}
 .janela-lote h4{margin:16px 0 6px}
+/* BPC T1 com mais de um T2: ícones de escolha ao lado do título "Invenção" */
+.janela-lote h4.titulo-inv{display:flex;align-items:center;gap:6px}
+.janela-lote h4.titulo-inv .inv-prod:first-of-type{margin-left:6px}
+.inv-prod{display:inline-flex;align-items:center;padding:2px 4px}
+.inv-prod .ico{margin:0}
+.inv-prod[aria-pressed="true"]{background:rgba(var(--accent-rgb),.3);border-color:rgba(var(--accent-rgb),.7)}
+
+/* ---------- loot appraiser ---------- */
+/* rotas com reprocesso: verde (estrutura) e pêssego (Jita); estrutura e Jita sem refino usam .rota-e/.rota-j do base.css */
+.rota-re{color:var(--rota-re)}
+.rota-rj{color:var(--rota-rj)}
+.lap-cola{display:block;width:100%;box-sizing:border-box;resize:vertical;margin-bottom:6px}
+table.as td.melhor{font-weight:600}
+/* item que não refina: nas rotas de refino é o item inteiro (mesmo valor da rota sem refino) */
+table.as td.inteiro{font-style:italic}
+/* cabeçalho que ordena (Item, Qtd e as quatro rotas): texto do th virando botão; a ordem ativa sai na cor do app */
+table.as th .ordena{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
+table.as th .ordena:hover{color:var(--text)}
+table.as th .ordena[aria-pressed="true"]{color:var(--accent)}
+/* veredito do lote: rótulo de cada rota na cor dela (o th da tabela é cinza por padrão) */
+table.as.grade th.rota-e{color:var(--rota-e)}
+table.as.grade th.rota-j{color:var(--rota-j)}
+table.as.grade th.rota-re{color:var(--rota-re)}
+table.as.grade th.rota-rj{color:var(--rota-rj)}
 .bp-info{color:var(--accent)}
 .nota:empty{display:none}
 .campo{padding:4px 6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:var(--text);font:inherit}
@@ -146,7 +179,13 @@ table.as tr.podado td{color:var(--muted)}
 table.as tr.vence td{background:rgba(92,184,92,.14)}
 table.as tr.clica{cursor:pointer}
 table.as tr.clica:hover td{background:rgba(var(--accent-rgb),.14)}
-.constroi{color:#5cb85c}
+.constroi{color:var(--verde)}
+/* lista de compra no Resultado: botões de clipboard e os check box */
+.clip{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin-top:10px}
+.win .content .clip .btn.rota-e{color:var(--rota-e)}
+.win .content .clip .btn.rota-j{color:var(--rota-j)}
+.win .content .btn.copiado{color:var(--verde);border-color:var(--verde)}
+.clip-opcao{display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
 .falta{color:var(--danger-line)}
 
 /* parâmetros e saldo em grade: rótulo em cima, valor embaixo */

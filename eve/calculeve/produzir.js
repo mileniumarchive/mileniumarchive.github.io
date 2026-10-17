@@ -4,14 +4,14 @@
    insumos crus, resultado e rotas de venda. O motor, as seções e a carga de preços são os do t2.js (T2.*);
    aqui ficam só a lista de blueprints e o lote (Runs).
    ========================================================================== */
-(function(){
+var Produzir = (function(){
   "use strict";
   var el = CV.el, FAB = CV.ATIV.FAB;
   var SEM_DEC = { t: null, name: "—", prob: 1, me: 0, te: 0, runs: 0 };
 
   var SEL = CV.seletores("prod", { char: "calculeve.prod.char", merc: "calculeve.prod.mercado",
-                                   fab: "calculeve.prod.fabrica", frete: "calculeve.prod.frete" },
-                         function(){ if (atual) T2.carrega(atual); });
+                                   fab: "calculeve.prod.fabrica", reac: "calculeve.prod.reacao", frete: "calculeve.prod.frete" },
+                         function(){ if (atual && atual.sel === SEL) T2.carrega(atual); });
   document.getElementById("w-prod").addEventListener("fechou", SEL.fecha);
 
   var atual = null, ultimo = null;
@@ -48,14 +48,15 @@
   }
 
   /* abre o lote de uma blueprint com 1 run; numa BPC o campo Runs não passa de cópias × runs da cópia;
-     na BPO simulada (b.sim, blueprint fora do estoque) ME e TE viram campos */
-  function abre(I, b, E, BPS){
+     na BPO simulada (b.sim, blueprint fora do estoque) ME e TE viram campos. `sel` = seletores de quem abriu
+     (os do Produzir, ou os do Fuel Blocks, que é atalho para cá) */
+  function abre(I, b, E, BPS, sel, J){
     var prod = I.produto.get(I.k(FAB, b.t));                      // item fabricado e unidades por run
     if (!prod) return;
     var ctx = { I: I, bp: b.t, bpT2: b.t, item: prod.t, qRun: prod.q, producao: true,
-                meBp: b.me, teBp: b.te, E: E, BPS: BPS, chanceBase: 0, sk: { sci: [], enc: null },
+                meBp: b.me, teBp: b.te, E: E, BPS: BPS, J: J, chanceBase: 0, sk: { sci: [], enc: null },
                 jobs: 1, sobra: 0, runs: 1, maxRuns: b.copia ? b.runs * b.qt : null, sim: !!b.sim };
-    T2.ligaJanela(ctx, SEL, { ts: jTs, aviso: jAviso }, function(){ return atual === ctx; }, desenha);
+    T2.ligaJanela(ctx, sel || SEL, { ts: jTs, aviso: jAviso }, function(){ return atual === ctx; }, desenha);
     ctx.ids = Array.from(T2.arvore(I, ctx.item, ctx.bpT2).keys());
     atual = ctx;
     jTitulo.textContent = ctx.nome(ctx.item);
@@ -113,7 +114,7 @@
                            return g.c === 6 ? "Naves" : g.c === 7 ? (/^Rig /.test(g.n) ? "Rigs" : "Módulos")
                                 : g.c === 8 ? "Munição" : "Outros";
                          },
-                         aoAbrir: function(b, snap){ abre(I, b, CV.estoquePorTipo(snap), T2.bpsDoEstoque(snap)); } });
+                         aoAbrir: function(b, snap){ abre(I, b, CV.estoquePorTipo(snap), T2.bpsDoEstoque(snap), null, CV.emJobPorTipo(snap)); } });
   }
 
   bBrave.addEventListener("click", function(){
@@ -130,4 +131,14 @@
     if (!temCsv){ soBrave = false; bBrave.setAttribute("aria-pressed", "false"); }
     desenhaGrid().catch(function(e){ console.error(e); nota.textContent = "Erro: " + e.message; });
   });
+
+  /* para o Fuel Blocks: abre o lote de uma blueprint do estoque (ou BPO simulada, b.sim) com os seletores dele;
+     recarrega(sel) refaz a carga do lote aberto, se ele foi aberto com esses seletores */
+  return {
+    abre: async function(b, snap, sel){
+      var I = await CV.industria();
+      abre(I, b, CV.estoquePorTipo(snap), T2.bpsDoEstoque(snap), sel, CV.emJobPorTipo(snap));
+    },
+    recarrega: function(sel){ if (atual && atual.sel === sel) T2.carrega(atual); }
+  };
 })();

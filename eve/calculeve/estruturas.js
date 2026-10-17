@@ -17,7 +17,7 @@
       ["meEstr", "ME da estrutura — fabricação (%)"], ["meRigFab", "ME do rig — fabricação (%)"],
       ["meRigReac", "ME do rig — reação (%)"], ["teEstrFab", "TE da estrutura — fabricação (%)"],
       ["teRigFab", "TE do rig — fabricação (%)"], ["teEstrReac", "TE da estrutura — reação (%)"],
-      ["teRigReac", "TE do rig — reação (%)"]] }
+      ["teRigReac", "TE do rig — reação (%)"], ["taxaRefino", "Taxa de refino (%)"]] }
   };
   var cad = document.getElementById("estr-cad"), ebForm = document.getElementById("eb-form"),
       ebTitulo = document.getElementById("eb-title"), ebCampos = document.getElementById("eb-campos");

@@ -16,7 +16,7 @@
 
   /* ---------------- escolhas (CV.seletores), as mesmas do Fuel Blocks ---------------- */
   var SEL = CV.seletores("t2", { char: "calculeve.t2.char", merc: "calculeve.t2.mercado",
-                                 fab: "calculeve.t2.fabrica", frete: "calculeve.t2.frete" },
+                                 fab: "calculeve.t2.fabrica", reac: "calculeve.t2.reacao", frete: "calculeve.t2.frete" },
                          function(){ if (atual) recarrega(atual); });
   document.getElementById("w-t2").addEventListener("fechou", SEL.fecha);
 
@@ -73,14 +73,15 @@
     return r;
   }
   /* ---------------- bônus da fábrica escolhida ---------------- */
+  /* bônus de estrutura como multiplicadores: fabricação da fábrica escolhida, reação da estrutura de reação
+     escolhida (normalmente outra, uma refinaria). Sem a escolha, sem bônus (1). sys / sysReac: sistema de cada
+     uma, para o índice de custo do job. */
   function bonusFabrica(sel){
-    var f = sel.escolhido("fab");
-    if (!f) return { meFab: 1, meReac: 1, teFab: 1, teReac: 1, sys: null, nome: null };
-    var b = f.bonus || {};
-    function p(k){ return (Number(b[k]) || 0) / 100; }
-    return { meFab: (1 - p("meEstr")) * (1 - p("meRigFab")), meReac: 1 - p("meRigReac"),
-             teFab: (1 - p("teEstrFab")) * (1 - p("teRigFab")), teReac: (1 - p("teEstrReac")) * (1 - p("teRigReac")),
-             sys: f.sys, nome: f.name };
+    var f = sel.escolhido("fab"), r = sel.escolhido("reac");
+    function p(e, k){ return (Number(((e && e.bonus) || {})[k]) || 0) / 100; }
+    return { meFab: (1 - p(f, "meEstr")) * (1 - p(f, "meRigFab")), teFab: (1 - p(f, "teEstrFab")) * (1 - p(f, "teRigFab")),
+             meReac: 1 - p(r, "meRigReac"), teReac: (1 - p(r, "teEstrReac")) * (1 - p(r, "teRigReac")),
+             sys: f ? f.sys : null, sysReac: r ? r.sys : null };
   }
 
   /* ---------------- custo de job: índice do sistema da fábrica × EIV ----------------
@@ -150,9 +151,11 @@
     return nos;
   }
 
-  /* qtd efetiva de um material por run: MAX(1; base × (1 − ME) × bônus da estrutura) (§5.15) */
+  /* qtd efetiva de um material por run: MAX(1; base × (1 − ME) × bônus da estrutura) (§5.15). O ME é o da blueprint
+     que consome o material (o job), não o da blueprint do material; reação não tem ME */
   function qtdEfetiva(base, me, act, bonus){
-    return Math.max(1, base * (1 - (me || 0) / 100) * (act === REAC ? bonus.meReac : bonus.meFab));
+    if (act === REAC) return Math.max(1, base * bonus.meReac);
+    return Math.max(1, base * (1 - (me || 0) / 100) * bonus.meFab);
   }
   /* tempo por run: base do SDE × (1 − TE da BP) × bônus de skill da atividade × bônus de tempo da estrutura */
   function tempoRun(ctx, no, te){
@@ -191,8 +194,9 @@
     /* custo de um job, por run (não por unidade): EIV da receita × índice da atividade no sistema.
        Quem divide pelo rendimento é quem calcula o custo por unidade. */
     function custoJobRun(no){
-      if (!ctx.indices || !ctx.ajustados || !ctx.bonus.sys) return 0;
-      var ind = (ctx.indices.get(ctx.bonus.sys) || {})[ATIVIDADE[no.act]];
+      var sys = no.act === REAC ? ctx.bonus.sysReac : ctx.bonus.sys;     // reação: sistema da estrutura de reação
+      if (!ctx.indices || !ctx.ajustados || !sys) return 0;
+      var ind = (ctx.indices.get(sys) || {})[ATIVIDADE[no.act]];
       if (ind == null) return 0;
       var eiv = 0;
       no.mats.forEach(function(m){ eiv += m.q * (ctx.ajustados.get(m.t) || 0); });
@@ -207,18 +211,22 @@
         no.mats.forEach(function(m){
           var f = efetivo(m.t, caminho.concat([tipo]));
           if (f.melhor == null){ ok = false; return; }
-          soma += qtdEfetiva(m.q, meDe(m.t), no.act, ctx.bonus) * f.melhor;
+          soma += qtdEfetiva(m.q, me(no), no.act, ctx.bonus) * f.melhor;
         });
         if (ok) v.produzir = (soma + custoJobRun(no)) / no.rend;
       }
-      var vias = [v.produzir, v.estr, v.jita].filter(function(x){ return typeof x === "number" && isFinite(x); });
+      function num(x){ return typeof x === "number" && isFinite(x); }
+      var vias = [v.produzir, v.estr, v.jita].filter(num);
+      /* "Não gosto de reação": fora o item final, tudo é comprado pronto, na mais barata entre estrutura e Jita;
+         só produz o que não tem ordem de venda em nenhuma das duas */
+      var soCompra = ctx.semReacao && tipo !== ctx.item && (num(v.estr) || num(v.jita));
+      if (soCompra) vias = [v.estr, v.jita].filter(num);
       v.melhor = vias.length ? Math.min.apply(null, vias) : null;
       v.decisao = v.melhor == null ? "⚠ FALTA"
-                : v.melhor === v.produzir ? "CONSTRUIR"
+                : !soCompra && v.melhor === v.produzir ? "CONSTRUIR"
                 : v.melhor === v.estr ? "COMPRAR (estrut)" : "COMPRAR (Jita)";
       return v;
     }
-    function meDe(tipo){ var no = nos.get(tipo); return no ? me(no) : 0; }
 
     nos.forEach(function(no){ efetivo(no.tipo, []); });
 
@@ -226,7 +234,9 @@
     var ordem = Array.from(nos.values()).sort(function(a, b){ return a.prof - b.prof; });
     ordem.forEach(function(no){
       no.v = memo.get(no.tipo);
-      no.estoque = (ctx.E.get(no.tipo) || { qt: 0 }).qt;
+      /* "Comprar tudo": conta como se o estoque (e o que está em job) estivesse vazio */
+      no.estoque = ctx.compraTudo ? 0 : (ctx.E.get(no.tipo) || { qt: 0 }).qt;
+      no.emJob = ctx.compraTudo ? 0 : ((ctx.J && ctx.J.get(no.tipo)) || { qt: 0 }).qt;
       no.demanda = 0; no.dem0 = 0; no.ativo = false; no.runs = 0; no.runs0 = 0; no.comprar = 0; no.sobra = 0;
       no.tempo = no.bp ? tempoRun(ctx, no, te(no)) : null;
     });
@@ -235,18 +245,19 @@
        12,0000000001 vire 13) */
     function porJob(x){ return ctx.producao ? Math.ceil(x - 1e-9) : x; }
     var raiz = nos.get(ctx.item);
-    raiz.ativo = true; raiz.demanda = c.alvo; raiz.dem0 = c.alvo; raiz.estoque = 0;
+    raiz.ativo = true; raiz.demanda = c.alvo; raiz.dem0 = c.alvo; raiz.estoque = 0; raiz.emJob = 0;
     if (raiz.v.produzir != null) raiz.v.decisao = "CONSTRUIR (BPC)";
     ordem.forEach(function(no){
       if (!no.ativo) return;
       var d = no.v.decisao;
       if (d.indexOf("CONSTRUIR") === 0){
-        no.runs = Math.ceil(Math.max(0, no.demanda - no.estoque) / no.rend);
+        /* o que já está em job conta como run feita: sai do runs a fazer e entra na sobra */
+        no.runs = Math.ceil(Math.max(0, no.demanda - no.estoque - no.emJob) / no.rend);
         no.runs0 = Math.ceil(no.dem0 / no.rend);
-        no.sobra = no.estoque + no.runs * no.rend - no.demanda;
+        no.sobra = no.estoque + no.emJob + no.runs * no.rend - no.demanda;
         no.horas = no.tempo == null ? null : no.runs * no.tempo / 3600;
         no.mats.forEach(function(m){
-          var filho = nos.get(m.t), q = qtdEfetiva(m.q, meDe(m.t), no.act, ctx.bonus);
+          var filho = nos.get(m.t), q = qtdEfetiva(m.q, me(no), no.act, ctx.bonus);
           if (!filho) return;
           filho.ativo = true;
           filho.demanda += porJob(q * no.runs);
@@ -398,12 +409,20 @@
     var tb = el("tbody"); tab.appendChild(tb); jBody.appendChild(tab);
     return tb;
   }
-  function celItem(ctx, tipo, nivel, variante){
+  function celItem(ctx, tipo, nivel, variante, copia){
     var td = el("td", nivel != null ? "arv" : null);
     if (nivel != null) td.style.setProperty("--nivel", nivel);
     td.appendChild(CV.iconeTipo(tipo, variante || "icon"));
-    td.appendChild(document.createTextNode(ctx.nome(tipo)));
+    td.appendChild(copia ? CV.copiavel(ctx.nome(tipo)) : document.createTextNode(ctx.nome(tipo)));
     return td;
+  }
+  /* o que a melhor rota manda comprar (estrutura ou Jita): nome e Comprar (un) viram botões que copiam
+     (a quantidade vai sem separador de milhar) */
+  function compra(no, via){ return no.ativo && (via === "E" || via === "J") && no.comprar > 0; }
+  function celComprar(no, copia){
+    var t = fmtInt.format(no.comprar);
+    if (!copia) return el("td", "n", t);
+    var td = el("td", "n"); td.appendChild(CV.copiavel(t, String(Math.round(no.comprar)))); return td;
   }
   /* parâmetros em colunas: rótulo em cima, valor embaixo, `porLinha` por faixa — em linha a linha
      sobrava espaço vazio à direita */
@@ -428,6 +447,17 @@
 
   function secInvencao(ctx, c){
     secao("Invenção");
+    /* BPC T1 que inventa mais de um T2: um ícone por produto ao lado do título; o marcado é o da conta */
+    if (ctx.prods.length > 1){
+      var h = jBody.lastChild; h.classList.add("titulo-inv");
+      ctx.prods.forEach(function(p){
+        var item = ctx.I.produto.get(ctx.I.k(FAB, p.t)).t, b = el("button", "btn inv-prod");
+        b.title = ctx.nome(item); b.setAttribute("aria-pressed", String(p.t === ctx.bpT2));
+        b.appendChild(CV.iconeTipo(item, "icon"));
+        b.addEventListener("click", function(){ trocaProduto(ctx, p); });
+        h.appendChild(b);
+      });
+    }
     var pares = [["Chance base (SDE)", pct(ctx.chanceBase)],
                  ["Chance com skills e decryptor", pct(c.chance)]];
     ctx.sk.sci.concat(ctx.sk.enc ? [ctx.sk.enc] : []).forEach(function(sk){
@@ -490,18 +520,30 @@
     return el("td", tem ? "constroi" : "falta", tem ? "V" : "x");
   }
 
+  /* Em job / Termina: produto de job de fabricação/reação ainda não entregue (ctx.J = CV.emJobPorTipo).
+     Desconta do Runs a fazer dos nós CONSTRUIR (no `cenario`); não entra no estoque nem no Comprar. */
+  function celEmJob(ctx, tipo){
+    var j = ctx.J && ctx.J.get(tipo);
+    return j ? el("td", "n emjob", fmtInt.format(j.qt)) : el("td", "n cinza", "0");
+  }
+  function celTermina(ctx, tipo){
+    var j = ctx.J && ctx.J.get(tipo);
+    return j ? el("td", "emjob", CV.dataHora(j.fim)) : el("td", "cinza", "—");
+  }
+
   function secCadeia(ctx, c){
     secao("Cadeia de fabricáveis — produzir vs comprar (3 vias), com poda");
-    var tb = tabela([["Item (árvore)"], ["BP"], ["Runs a fazer", "n"], ["Estoque", "n"], ["Comprar (un)", "n"],
+    var tb = tabela([["Item (árvore)"], ["BP"], ["Runs a fazer", "n"], ["Estoque", "n"], ["Em job", "n"], ["Termina"], ["Comprar (un)", "n"],
                      ["Produzir", "n"], ["Comprar (E)", "n"], ["Comprar (J)", "n"], ["Melhor rota", "n"],
                      ["Qtd no ciclo", "n"], ["Horas de fila", "n"], ["Sobra (un)", "n"]]);
     c.nos.forEach(function(no){
       if (no.tipo === ctx.item) return;          // o item inventado é o Resultado, não um insumo da cadeia
-      var v = no.v, via = no.ativo ? viaDe(v) : null, tr = el("tr", no.ativo ? null : "podado");
-      tr.append(celItem(ctx, no.tipo, no.prof), celBp(ctx, no),
+      var v = no.v, via = no.ativo ? viaDe(v) : null, tr = el("tr", no.ativo ? null : "podado"), cp = compra(no, via);
+      tr.append(celItem(ctx, no.tipo, no.prof, null, cp), celBp(ctx, no),
                 el("td", "n", fmtInt.format(no.runs)),
                 el("td", "n" + (no.estoque ? "" : " cinza"), fmtInt.format(no.estoque)),
-                el("td", "n", fmtInt.format(no.comprar)),
+                celEmJob(ctx, no.tipo), celTermina(ctx, no.tipo),
+                celComprar(no, cp),
                 celCor(v.produzir, "P"), celCor(v.estr, "E"), celCor(v.jita, "J"),
                 celCor(v.melhor, via, no.ativo ? null : "— desnecessário"),
                 el("td", "n", fmtQtd.format(no.demanda)),
@@ -513,15 +555,16 @@
 
   function secCrus(ctx, c){
     secao("Insumos crus — a lista de compra");
-    var tb = tabela([["Insumo"], ["Qtd no ciclo", "n"], ["Estoque", "n"], ["Comprar (un)", "n"],
+    var tb = tabela([["Insumo"], ["Qtd no ciclo", "n"], ["Estoque", "n"], ["Em job", "n"], ["Termina"], ["Comprar (un)", "n"],
                      ["Comprar (E)", "n"], ["Comprar (J)", "n"], ["Melhor rota (gasto)", "n"]]);
     c.crus.forEach(function(no){
       var v = no.v, via = no.ativo ? viaDe(v) : null, tr = el("tr", no.ativo ? null : "podado");
-      var gasto = v.melhor == null ? null : no.comprar * v.melhor;
-      tr.append(celItem(ctx, no.tipo),
+      var gasto = v.melhor == null ? null : no.comprar * v.melhor, cp = compra(no, via);
+      tr.append(celItem(ctx, no.tipo, null, null, cp),
                 el("td", "n", fmtQtd.format(no.demanda)),
                 el("td", "n" + (no.estoque ? "" : " cinza"), fmtInt.format(no.estoque)),
-                el("td", "n", fmtInt.format(no.comprar)),
+                celEmJob(ctx, no.tipo), celTermina(ctx, no.tipo),
+                celComprar(no, cp),
                 celCor(v.estr, "E"), celCor(v.jita, "J"),
                 celCor(gasto, gasto === 0 ? "P" : via, no.ativo ? null : "— desnecessário"));
       tb.appendChild(tr);
@@ -566,10 +609,64 @@
            ["Lucro", isk(c.lucro), CV.sinal(c.lucro).trim()],
            ["ROI estrutura (sell)", pct(c.rois[0]), CV.sinal(c.rois[0]).trim()],
            ["ROI Jita (buy)", pct(c.rois[3]), CV.sinal(c.rois[3]).trim()]], 5);
+    secClipboard(ctx, c);
+    /* buybacks cadastrados (buyback.js): unidades × Jita buy × % do buyback */
+    var jb = !ctx.jita ? "carregando…" : ctx.jita instanceof Error ? "erro em Jita" : (ctx.jita.p[ctx.item] || [null, null])[1];
+    Buyback.grade(jBody, ctx.item, (ctx.I.T.get(ctx.item) || {}).group, jb, c.unidades);
     if (ctx.hist) grade([["Preço médio — 30 dias", ctx.hist[0] == null ? "SEM VENDAS" : isk(ctx.hist[0])],
                          ["Qtd média por dia — 30 dias", fmtQtd.format(ctx.hist[1])]], 2);
     if (c.semPreco) jAviso.textContent = "Algum item da cadeia não tem ordem em nenhuma das duas rotas: o total investido sai por baixo.";
   }
+
+  /* ---------------- lista de compra para o clipboard ----------------
+     Uma linha por item, "nome<TAB>quantidade" (o formato em que o jogo copia uma lista de itens), em ordem alfabética.
+     Entra o Comprar (un) de tudo que a melhor rota manda comprar, na Cadeia e nos Insumos crus, e na invenção os
+     datacores e o decryptor do lote inteiro (eles nunca descontam estoque). Clipboard E = o que se compra na estrutura,
+     Clipboard J = o que se compra em Jita; com "COMPRAR TUDO DE VERDADE" os dois viram um botão só, com tudo. */
+  function itensCompra(ctx, c){
+    var itens = [];
+    c.nos.concat(c.crus).forEach(function(no){
+      if (no.tipo === ctx.item || !no.ativo || no.v.melhor == null || no.v.decisao.indexOf("CONSTRUIR") === 0) return;
+      itens.push({ t: no.tipo, via: no.v.melhor === no.v.estr ? "E" : "J", q: no.comprar });
+    });
+    (c.datacores || []).forEach(function(d){ if (d.rota) itens.push({ t: d.t, via: d.rota, q: d.q * ctx.jobs }); });
+    if (c.dec && c.dec.t != null && c.rotaDec) itens.push({ t: c.dec.t, via: c.rotaDec.rota, q: ctx.jobs });
+    return itens;
+  }
+  function textoCompra(ctx, itens, via){
+    var m = new Map();
+    itens.forEach(function(x){ if (x.q > 0 && (!via || x.via === via)) m.set(x.t, (m.get(x.t) || 0) + Math.ceil(x.q)); });
+    return Array.from(m).sort(function(a, b){ return ctx.nome(a[0]).localeCompare(ctx.nome(b[0])); })
+      .map(function(x){ return ctx.nome(x[0]) + "\t" + x[1]; }).join("\n");
+  }
+  function botaoClip(rotulo, cls, txt){
+    var b = CV.copiavel(rotulo, txt, "btn" + (cls ? " " + cls : ""));
+    if (!txt){ b.disabled = true; b.title = "Nada a comprar"; }
+    return b;
+  }
+  function caixa(rotulo, marcada, aoMudar){
+    var l = el("label", "clip-opcao"), i = el("input");
+    i.type = "checkbox"; i.checked = !!marcada;
+    i.addEventListener("change", function(){ aoMudar(i.checked); });
+    l.append(i, document.createTextNode(" " + rotulo));
+    return l;
+  }
+  function secClipboard(ctx, c){
+    var itens = itensCompra(ctx, c), linha = el("div", "clip");
+    if (ctx.compraTudo && ctx.deVerdade) linha.appendChild(botaoClip("Clipboard (tudo)", null, textoCompra(ctx, itens)));
+    else linha.append(botaoClip("Clipboard E", "rota-e", textoCompra(ctx, itens, "E")),
+                      botaoClip("Clipboard J", "rota-j", textoCompra(ctx, itens, "J")));
+    linha.appendChild(Nerds.rotulo(AJUDA_CLIP));
+    var ops = el("div", "clip");
+    ops.appendChild(caixa("Não gosto de reação", ctx.semReacao, function(v){ ctx.semReacao = v; ctx.redesenha(); }));
+    ops.appendChild(caixa("Comprar tudo", ctx.compraTudo, function(v){
+      ctx.compraTudo = v; if (!v) ctx.deVerdade = false; ctx.redesenha();
+    }));
+    if (ctx.compraTudo)
+      ops.appendChild(caixa("COMPRAR TUDO DE VERDADE", ctx.deVerdade, function(v){ ctx.deVerdade = v; ctx.redesenha(); }));
+    jBody.append(linha, ops);
+  }
+  var AJUDA_CLIP = "Que diabo são esses check box?";
 
   /* ---------------- Números para Nerds: o resto da conta ---------------- */
   function gruposNerd(ctx, c){
@@ -613,7 +710,7 @@
       var esc = cs.filter(function(c){ return c.dec.name === fixado; })[0];
       if (esc) vencedor = esc;
     }
-    jBp.textContent = "BPC T1: ME " + ctx.meBp + " / TE " + ctx.teBp +
+    jBp.textContent = (ctx.sim ? "BPC T1 simulada (não está no estoque)" : "BPC T1: ME " + ctx.meBp + " / TE " + ctx.teBp) +
                       " · decryptor: " + vencedor.dec.name + (fixado ? " (fixado)" : " (vencedor por ROI)");
     ultimo = { ctx: ctx, c: vencedor };
     secInvencao(ctx, vencedor);
@@ -667,33 +764,51 @@
       este.jita = r[0]; este.vol = r[1]; este.redesenha();
     }, function(e){ console.error(e); if (este.ativo()){ este.jita = e; este.redesenha(); } });
 
-    if (ctx.bonus.sys) Promise.all([indicesSistema(), precosAjustados()]).then(function(r){
+    if (ctx.bonus.sys || ctx.bonus.sysReac) Promise.all([indicesSistema(), precosAjustados()]).then(function(r){
       if (!este.ativo()) return;
       este.indices = r[0]; este.ajustados = r[1]; este.redesenha();
     }, function(e){ console.error(e); if (este.ativo()){ este.ui.aviso.textContent = "Erro no índice de custo: " + e.message; } });
   }
 
   /* ---------------- abre o lote de uma BPC T1 ---------------- */
-  function abre(I, bpc, E, BPS){
-    var inv = I.produto.get(I.k(INV, bpc.t));                     // BPC T2 inventada e runs por BPC
-    var fab = I.produto.get(I.k(FAB, inv.t));                     // item T2 e unidades por run
-    if (!fab) return;
-    var ctx = { I: I, bp: bpc.t, bpT2: inv.t, item: fab.t, qRun: fab.q, runsBase: inv.q,
-                meBp: bpc.me, teBp: bpc.te, E: E, BPS: BPS,
-                chanceBase: I.prob.get(bpc.t) || 0, sk: separaSkills(I, bpc.t),
-                tempoInv: I.tempo.get(I.k(INV, bpc.t)), jobs: JOBS_PADRAO, sobra: 0 };
-    ligaJanela(ctx, SEL, { ts: jTs, aviso: AVISO_T2 }, function(){ return atual === ctx; }, desenha);
+  /* produto da invenção que a conta usa (a BPC T1 pode inventar mais de um T2; quem escolhe é o jogador, no job):
+     BPC T2, runs por BPC, item T2 e unidades por run, e os tipos que a carga de preços busca */
+  function usaProduto(ctx, p){
+    var I = ctx.I, fab = I.produto.get(I.k(FAB, p.t));
+    ctx.bpT2 = p.t; ctx.runsBase = p.q; ctx.item = fab.t; ctx.qRun = fab.q;
     var ids = Array.from(arvore(I, ctx.item, ctx.bpT2).keys());
-    (I.mat.get(I.k(INV, bpc.t)) || []).forEach(function(m){ ids.push(m.t); });
+    (I.mat.get(I.k(INV, ctx.bp)) || []).forEach(function(m){ ids.push(m.t); });
+    (ctx.decIds || []).forEach(function(t){ if (ids.indexOf(t) < 0) ids.push(t); });
     ctx.ids = ids;
+    jTitulo.textContent = ctx.nome(ctx.item);
+  }
+
+  function abre(I, bpc, E, BPS, J){
+    var prods = (I.inv.get(bpc.t) || []).filter(function(p){ return I.produto.has(I.k(FAB, p.t)); });
+    if (!prods.length) return;
+    var ctx = { I: I, bp: bpc.t, prods: prods,
+                meBp: bpc.me, teBp: bpc.te, E: E, BPS: BPS, J: J,
+                chanceBase: I.prob.get(bpc.t) || 0, sk: separaSkills(I, bpc.t),
+                tempoInv: I.tempo.get(I.k(INV, bpc.t)), jobs: JOBS_PADRAO, sobra: 0, sim: !!bpc.sim };
+    ligaJanela(ctx, SEL, { ts: jTs, aviso: AVISO_T2 }, function(){ return atual === ctx; }, desenha);
+    usaProduto(ctx, prods[0]);
     ctx.char = SEL.escolhido("char");
     atual = ctx; fixado = null;
-    jTitulo.textContent = ctx.nome(ctx.item);
     jJobs.value = String(ctx.jobs); jSobra.value = "0";
     decryptors().then(function(ds){
-      ds.forEach(function(d){ if (d.t != null && ctx.ids.indexOf(d.t) < 0) ctx.ids.push(d.t); });
+      ctx.decIds = ds.filter(function(d){ return d.t != null; }).map(function(d){ return d.t; });
+      ctx.decIds.forEach(function(t){ if (ctx.ids.indexOf(t) < 0) ctx.ids.push(t); });
     });
     WIN.open("w-t2job");
+    recarrega(ctx);
+    desenha();
+  }
+
+  /* troca o T2 inventado (ícones ao lado de "Invenção") e refaz a carga e a conta */
+  function trocaProduto(ctx, p){
+    if (p.t === ctx.bpT2) return;
+    usaProduto(ctx, p);
+    ctx.jita = null; ctx.vol = null;
     recarrega(ctx);
     desenha();
   }
@@ -711,8 +826,9 @@
     var I = await idx();
     return CV.listaBps({ grid: grid, nota: nota, busca: document.getElementById("t2-busca"), vazio: "Nenhuma BPC com invenção no estoque.",
                          extraNota: " Só BPC: invenção só roda em cópia.",
+                         simula: true, simCopia: true,
                          aceita: function(tipo, copia){ return copia && I.produto.has(I.k(INV, tipo)); },
-                         aoAbrir: function(b, snap){ abre(I, b, CV.estoquePorTipo(snap), bpsDoEstoque(snap)); } });
+                         aoAbrir: function(b, snap){ abre(I, b, CV.estoquePorTipo(snap), bpsDoEstoque(snap), CV.emJobPorTipo(snap)); } });
   }
 
   /* o que a janela Produzir reusa (produzir.js, carregado depois) */

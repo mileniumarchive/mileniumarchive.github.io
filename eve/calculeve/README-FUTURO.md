@@ -61,8 +61,8 @@ importar os de lá não resolve, porque refresh token é amarrado ao Client ID q
 
 - **Custo do job de invenção**: a Invenção T2 calcula o custo dos jobs de fabricação e reação
   (`EIV × índice do sistema`), mas não o do job de invenção — falta saber qual EIV a CCP usa nele.
-- **Buyback**: a planilha compara com o buyback por contrato (`W1`); no site não existe programa de buyback
-  cadastrado, então a Invenção T2 compara só as três rotas de mercado.
+- **Buyback**: os buybacks cadastrados aparecem numa grade própria no Resultado, fora das rotas de venda; não entram
+  na melhor rota, no lucro, no ROI nem no Nerds.
 
 - **ESI `/latest`**: o site e o `att.py` usam `https://esi.evetech.net/latest/...`; a especificação
   atual da ESI (`/meta/openapi.json`) não lista caminhos com `/latest` e usa um parâmetro de data de

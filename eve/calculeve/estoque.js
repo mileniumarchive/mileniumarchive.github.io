@@ -63,23 +63,35 @@
     try { jobs = await esiPaginado("/characters/" + c.id + "/industry/jobs/?include_completed=false", tk); }
     catch(e){ console.warn("jobs de " + c.name + ": " + e.message); }
     bps.forEach(function(b){ b.dono = c.name; });
-    jobs.forEach(function(j){ j.dono = c.name; });
+    var I = await CV.industria();
+    jobs.forEach(function(j){ j.dono = c.name; var q = CV.qtdProduzida(I, j); if (q) j.qtdProd = q; });
 
     return { char: c, tk: tk, assets: assets, loc: loc, bps: bps, jobs: jobs, avisoBp: avisoBp };
   }
 
   /* ---------------- montagem ---------------- */
-  /* árvore: item dentro de item conhecido vira filho; o resto é raiz do seu local */
+  /* árvore: item dentro de item conhecido vira filho; o resto é raiz do seu local.
+     Produto de job de fabricação/reação não entregue (job.qtdProd) entra como item `emJob` no local de
+     entrega do job (output_location_id): filho, se o local é um item conhecido; senão, raiz daquele local. */
   function arvore(dados){
     var assets = [].concat.apply([], dados.map(function(d){ return d.assets; }));
     var porId = new Map(); assets.forEach(function(a){ porId.set(a.item_id, a); a.filhos = []; });
     var raizes = new Map();          // location_id -> [itens]
-    assets.forEach(function(a){
-      var pai = a.location_type === "item" ? porId.get(a.location_id) : null;
+    function poe(a, local, pai){
       if (pai) pai.filhos.push(a);
-      else { if (!raizes.has(a.location_id)) raizes.set(a.location_id, []); raizes.get(a.location_id).push(a); }
+      else { if (!raizes.has(local)) raizes.set(local, []); raizes.get(local).push(a); }
+    }
+    assets.forEach(function(a){ poe(a, a.location_id, a.location_type === "item" ? porId.get(a.location_id) : null); });
+    var emJob = [];
+    dados.forEach(function(d){
+      (d.jobs || []).forEach(function(j){
+        if (!j.qtdProd) return;
+        var a = { item_id: "job-" + j.job_id, type_id: j.product_type_id, quantity: j.qtdProd, filhos: [],
+                  emJob: true, fim: j.end_date, dono: d.char.name };
+        emJob.push(a); poe(a, j.output_location_id, porId.get(j.output_location_id));
+      });
     });
-    return { assets: assets, raizes: raizes };
+    return { assets: assets.concat(emJob), raizes: raizes };
   }
 
   async function monta(dados, status){
@@ -162,12 +174,13 @@
 
   function linhaItem(M, a, nivel, tb, multi, F){
     var t = M.T.get(a.type_id) || { name: "Tipo " + a.type_id, group: 0, vol: 0 };
-    var tr = el("tr", "it" + (a.filhos.length ? " pai" : ""));
+    var tr = el("tr", "it" + (a.filhos.length ? " pai" : "") + (a.emJob ? " emjob" : ""));
     var td = el("td", "arv"); td.style.setProperty("--nivel", nivel); td.style.setProperty("--passo", "18px");
     var tw = el("span", "tw", a.filhos.length ? "▸" : ""); td.appendChild(tw);
     td.appendChild(CV.iconeTipo(a.type_id, /Blueprint|Formula/.test(t.name) ? (a.is_blueprint_copy ? "bpc" : "bp") : "icon"));
     td.appendChild(document.createTextNode(a.nome || t.name));
     if (a.nome) td.appendChild(el("span", "sub", t.name));
+    if (a.emJob) td.appendChild(el("span", "sub", "em job · termina " + CV.dataHora(a.fim)));
     tr.appendChild(td);
     tr.appendChild(el("td", "n", fmtInt.format(a.quantity)));
     tr.appendChild(el("td", null, M.G[t.group] || ""));
@@ -208,11 +221,11 @@
     });
   }
 
-  /* soma a quantidade do mesmo tipo; item com conteúdo (nave, container) continua separado */
+  /* soma a quantidade do mesmo tipo; item com conteúdo (nave, container) e produto em job continuam separados */
   function somaTipos(itens){
     var out = [], porTipo = new Map();
     itens.forEach(function(a){
-      if (a.filhos.length){ out.push(a); return; }
+      if (a.filhos.length || a.emJob){ out.push(a); return; }
       var x = porTipo.get(a.type_id);
       if (!x){
         x = { item_id: "soma-" + a.type_id, type_id: a.type_id, quantity: 0, filhos: [],
@@ -291,7 +304,7 @@
                       runs: p[1] === "true" ? p[4] : "—", sit: "Hangar", dono: d.char.name });
       });
       d.jobs.forEach(function(j){
-        if (["active", "paused", "ready"].indexOf(j.status) < 0 && j.status != null) return;
+        if (!CV.jobAberto(j)) return;
         var fim = CV.dataHora(j.end_date);
         linhas.push({ t: j.blueprint_type_id, qtd: 1, tipo: "—", me: "—", te: "—", runs: j.runs || "—",
                       sit: (ATIVIDADE[j.activity_id] || ("Atividade " + j.activity_id)) + " até " + fim, dono: d.char.name });

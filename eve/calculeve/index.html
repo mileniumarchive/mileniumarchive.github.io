@@ -19,10 +19,16 @@
     <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#pasta-pessoa"/></svg>
     <span>Personagens</span>
   </button>
-  <button type="button" class="icon" id="ic-estoque" title="Estoque">
-    <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#caixa"/></svg>
-    <span>Estoque</span>
-  </button>
+  <div class="icon-linha">
+    <button type="button" class="icon" id="ic-estoque" title="Estoque">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#caixa"/></svg>
+      <span>Estoque</span>
+    </button>
+    <button type="button" class="icon" id="ic-lap" title="Loot Appraiser">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#lupa"/></svg>
+      <span>Loot Appraiser</span>
+    </button>
+  </div>
   <div class="icon-linha">
     <button type="button" class="icon" id="ic-fuel" title="Fuel Blocks">
       <img src="../../assets/icons/Fuel_Blocks.png" alt="">
@@ -49,6 +55,10 @@
     <button type="button" class="icon" id="ic-frete" title="Cadastrar Freighter Service">
       <span class="mascara mascara-freighter"></span>
       <span>Cadastrar Freighter Service</span>
+    </button>
+    <button type="button" class="icon" id="ic-bb" title="Cadastrar Buyback">
+      <svg viewBox="0 0 24 24"><use href="../../assets/icons/ui.svg#buyback"/></svg>
+      <span>Cadastrar Buyback</span>
     </button>
   </div>
   <div class="icon-linha">
@@ -104,6 +114,20 @@
   </div>
 </div>
 
+<div class="win largura-fixa janela-lote" id="w-lap">
+  <div class="title"><h3>Loot Appraiser</h3><button type="button" class="close" data-close="w-lap">&times;</button></div>
+  <div class="content">
+    <div class="escolhas" id="lap-escolhas"></div>
+    <textarea class="campo lap-cola" id="lap-txt" rows="8" placeholder="Cole aqui os itens, como o jogo copia (nome e quantidade)"></textarea>
+    <div class="fmat-precos"><span id="lap-ts"></span>
+      <button type="button" class="btn" id="lap-precos">Atualizar preços</button>
+      <button type="button" class="btn" id="lap-ok">Avaliar</button></div>
+    <div class="fmat-precos"><button type="button" class="btn" id="lap-nerd">Números para Nerds</button></div>
+    <div class="nota" id="lap-aviso"></div>
+    <div id="lap-body"></div>
+  </div>
+</div>
+
 <div class="win janela-lista" id="w-fuel">
   <div class="title"><h3>Fuel Blocks</h3><button type="button" class="close" data-close="w-fuel">&times;</button></div>
   <div class="content">
@@ -111,24 +135,6 @@
     <div class="grid" id="fuel-grid"></div>
     <div class="grid divisao" id="fuel-iso"></div>
     <p class="nota" id="fuel-nota"></p></div>
-</div>
-
-<div class="win" id="w-fmat">
-  <div class="title"><h3 id="fmat-title">Materiais</h3><button type="button" class="close" data-close="w-fmat">&times;</button></div>
-  <div class="content">
-    <div class="fmat-topo">
-      <span class="bp-info" id="fmat-bp"></span>
-      <span class="fmat-runs"><label>Runs <input type="number" class="campo campo-num" id="fmat-runs" min="1" step="1" value="1"></label>
-        <button type="button" class="btn" id="fmat-max">Max estoque</button>
-        <button type="button" class="btn" id="fmat-zerar">Zerar estoque</button></span>
-    </div>
-    <div id="fmat-tempo"></div>
-    <div class="fmat-precos"><span id="fmat-precos-ts"></span>
-      <button type="button" class="btn" id="fmat-precos-btn">Atualizar preços</button></div>
-    <div class="fmat-precos"><button type="button" class="btn" id="fmat-nerd-btn">Números para Nerds</button></div>
-    <div class="nota" id="fmat-aviso"></div>
-    <div id="fmat-body"></div>
-  </div>
 </div>
 
 <div class="win janela-lista" id="w-t2">
@@ -220,6 +226,34 @@
       <div class="acts">
         <button type="submit" class="btn">Salvar</button>
         <button type="button" class="btn" data-close="w-frete-form">Cancelar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="win" id="w-bb">
+  <div class="title"><h3>Cadastrar Buyback</h3><button type="button" class="close" data-close="w-bb">&times;</button></div>
+  <div class="content">
+    <div id="bb-lista"></div>
+    <div class="acts"><button type="button" class="btn" id="bb-add">+ Adicionar buyback</button></div>
+  </div>
+</div>
+
+<div class="win largura-fixa" id="w-bb-form">
+  <div class="title"><h3 id="bbf-title">Buyback</h3><button type="button" class="close" data-close="w-bb-form">&times;</button></div>
+  <div class="content">
+    <form id="bbf-form">
+      <div class="campos">
+        <label>Nome <input type="text" name="nome" required></label>
+        <label>% do Jita buy <input type="number" step="any" min="0" name="pct" required></label>
+      </div>
+      <h4>Exceções</h4>
+      <div id="bbf-exc"></div>
+      <input type="search" class="campo bb-busca" id="bbf-q" placeholder="Buscar item (mín. 3 letras)…">
+      <div id="bbf-res"></div>
+      <div class="acts">
+        <button type="submit" class="btn">Salvar</button>
+        <button type="button" class="btn" data-close="w-bb-form">Cancelar</button>
       </div>
     </form>
   </div>
@@ -353,5 +387,7 @@
 <script src="produzir.js"></script>
 <script src="estruturas.js"></script>
 <script src="frete.js"></script>
+<script src="buyback.js"></script>
+<script src="appraiser.js"></script>
 </body>
 </html>
